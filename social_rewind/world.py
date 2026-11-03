@@ -65,6 +65,7 @@ class World:
         self._state: dict[str, Any] = json.loads(self._s0_json)
         self._judge = judge
         self._events: list[dict[str, Any]] = []
+        self._timeline_id = 1
         self._assert_invariants(self._state)
 
     @staticmethod
@@ -175,21 +176,11 @@ class World:
             return copy.deepcopy(self._events)
         visible: list[dict[str, Any]] = []
         for event in self._events:
+            if event["timeline_id"] != self._timeline_id:
+                continue
             if "*" not in event["visibility"] and viewer not in event["visibility"]:
                 continue
-            item = {
-                "event_id": event["event_id"],
-                "sequence": event["sequence"],
-                "actor": event["actor"],
-                "kind": event["kind"],
-                "visibility": list(event["visibility"]),
-                "input": copy.deepcopy(event["input"]),
-                "accepted": event["accepted"],
-                "result_summary": copy.deepcopy(event["result_summary"]),
-            }
-            if viewer == event["actor"]:
-                item["decision"] = copy.deepcopy(event["decision"])
-            visible.append(item)
+            visible.append(self._agent_event_view(event, viewer))
         return visible
 
     def act(
@@ -208,6 +199,7 @@ class World:
                 raise _Refusal("unknown_actor", "行动者不在场景中", actor=action.actor)
             if action.kind not in ACTION_KINDS:
                 raise _Refusal("unknown_action", "未知行动类型", kind=action.kind)
+            self._validate_decision_evidence(action)
             if action.kind in PRIVATE_INTERACTIONS:
                 self._consume_interaction(candidate)
             result = self._dispatch(candidate, action, _recorded_judgments)
@@ -221,7 +213,7 @@ class World:
                 result_summary={"refusal": refusal.reason},
                 state_diff=[],
             )
-            return copy.deepcopy(event)
+            return self._action_receipt(event, action.actor)
 
         self._state = candidate
         state_diff = _diff(before, candidate)
@@ -234,7 +226,28 @@ class World:
             result_summary=summary,
             state_diff=state_diff,
         )
-        return copy.deepcopy(event)
+        return self._action_receipt(event, action.actor)
+
+    def _validate_decision_evidence(self, action: Action) -> None:
+        for event_id in action.decision.evidence_event_ids:
+            event = next(
+                (
+                    candidate
+                    for candidate in self._events
+                    if candidate["timeline_id"] == self._timeline_id
+                    and candidate["timeline_sequence"] == event_id
+                ),
+                None,
+            )
+            if (
+                event is None
+                or ("*" not in event["visibility"] and action.actor not in event["visibility"])
+            ):
+                raise _Refusal(
+                    "unobservable_evidence",
+                    "决策引用了行动者在当前时间线不可见的事件",
+                    event_id=event_id,
+                )
 
     def _consume_interaction(self, state: dict[str, Any]) -> None:
         day = str(state["day"])
@@ -500,9 +513,12 @@ class World:
         before = copy.deepcopy(self._state)
         self._state = json.loads(self._s0_json)
         self._assert_invariants(self._state)
+        next_timeline_id = self._timeline_id + 1
         event = {
             "event_id": len(self._events) + 1,
             "sequence": len(self._events) + 1,
+            "timeline_id": self._timeline_id,
+            "timeline_sequence": self._next_timeline_sequence(),
             "actor": AUDITOR,
             "kind": "reset",
             "visibility": ["*"],
@@ -511,13 +527,20 @@ class World:
                 "intent": "恢复不可变初始状态 S0",
                 "known_facts": ["实验时间线已结束"],
                 "uncertainty": "无",
+                "evidence_event_ids": [],
+                "known_facts_source": "actor_self_report",
             },
             "accepted": True,
-            "result": {"restored_s0": True, "s0_fingerprint": self.s0_fingerprint},
+            "result": {
+                "restored_s0": True,
+                "s0_fingerprint": self.s0_fingerprint,
+                "next_timeline_id": next_timeline_id,
+            },
             "result_summary": {"restored_s0": True},
             "state_diff": _diff(before, self._state),
         }
         self._events.append(event)
+        self._timeline_id = next_timeline_id
         return copy.deepcopy(event)
 
     @classmethod
@@ -546,7 +569,8 @@ class World:
                     records = expected.get("result", {}).get("judge_records")
                     if not isinstance(records, list):
                         raise ReplayError("推进事件缺少 Judge 记录")
-                actual = world.act(action, _recorded_judgments=records)
+                world.act(action, _recorded_judgments=records)
+                actual = copy.deepcopy(world._events[-1])
             if actual != expected:
                 raise ReplayError(f"事件 {expected_id} 回放结果与日志不一致")
         return world
@@ -565,6 +589,8 @@ class World:
         event = {
             "event_id": event_id,
             "sequence": event_id,
+            "timeline_id": self._timeline_id,
+            "timeline_sequence": self._next_timeline_sequence(),
             "actor": action.actor,
             "kind": action.kind,
             "visibility": visibility,
@@ -577,6 +603,32 @@ class World:
         }
         self._events.append(event)
         return event
+
+    def _next_timeline_sequence(self) -> int:
+        return 1 + sum(
+            event["timeline_id"] == self._timeline_id for event in self._events
+        )
+
+    @staticmethod
+    def _agent_event_view(event: dict[str, Any], viewer: str) -> dict[str, Any]:
+        item = {
+            "event_id": event["timeline_sequence"],
+            "sequence": event["timeline_sequence"],
+            "actor": event["actor"],
+            "kind": event["kind"],
+            "visibility": list(event["visibility"]),
+            "input": copy.deepcopy(event["input"]),
+            "accepted": event["accepted"],
+            "result_summary": copy.deepcopy(event["result_summary"]),
+        }
+        if viewer == event["actor"]:
+            item["decision"] = copy.deepcopy(event["decision"])
+        return item
+
+    def _action_receipt(self, event: dict[str, Any], actor: str) -> dict[str, Any]:
+        receipt = self._agent_event_view(event, actor)
+        receipt["result"] = receipt.pop("result_summary")
+        return receipt
 
     def _visibility_for(self, action: Action) -> list[str]:
         if action.kind == "advance_day":

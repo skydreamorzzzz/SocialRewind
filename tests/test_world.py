@@ -2,19 +2,25 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import unittest
 
 from social_rewind import Action, DecisionNote, MockJudge, ReplayError, World
+from social_rewind.judge import JudgeOutputError, validate_verdict
 from social_rewind.models import TimelineMemory
 from social_rewind.policy import choose_opening
 from social_rewind.scenario import fictional_dubbing_scenario
 
 
-def note(intent: str = "我将执行这项行动。") -> DecisionNote:
+def note(
+    intent: str = "我将执行这项行动。",
+    evidence_event_ids: tuple[int, ...] = (),
+) -> DecisionNote:
     return DecisionNote(
         intent=intent,
         known_facts=("项目今天截止。",),
         uncertainty="我不确定对方的选择。",
+        evidence_event_ids=evidence_event_ids,
     )
 
 
@@ -130,7 +136,8 @@ class WorldTests(unittest.TestCase):
         )
         self.assertFalse(event["accepted"])
         self.assertEqual("insufficient_budget", event["result"]["refusal"]["code"])
-        self.assertEqual([], event["state_diff"])
+        self.assertNotIn("state_diff", event)
+        self.assertEqual([], self.world.export_events("auditor")[-1]["state_diff"])
         self.assertEqual(before, self.world.audit_state("auditor"))
 
     def test_commitment_can_be_proposed_and_accepted(self) -> None:
@@ -191,9 +198,10 @@ class WorldTests(unittest.TestCase):
     def test_judged_work_is_settled_and_traceable(self) -> None:
         self.propose_and_accept()
         self.submit()
-        event = self.world.act(action("advance_day", "producer"))
-        record = event["result"]["judge_records"][0]
+        receipt = self.world.act(action("advance_day", "producer"))
+        record = self.world.export_events("auditor")[-1]["result"]["judge_records"][0]
         state = self.world.audit_state("auditor")
+        self.assertEqual(["ok"], receipt["result"]["settlements"])
         self.assertEqual("ok", record["status"])
         self.assertEqual("ev-clean-take", record["input"]["evidence"][0]["id"])
         self.assertEqual(["ev-clean-take"], record["output"]["evidence_ids"])
@@ -209,6 +217,48 @@ class WorldTests(unittest.TestCase):
         self.assertEqual(s0, self.world.audit_state("auditor"))
         self.assertEqual("reset", reset_event["kind"])
         self.assertEqual(event_count + 1, len(self.world.export_events("auditor")))
+
+    def test_reset_hides_prior_timeline_from_agents_but_not_auditor(self) -> None:
+        secret = "上一条时间线的私密谈判内容"
+        old_receipt = self.world.act(
+            action("send_message", "producer", to="voice_actor", content=secret)
+        )
+        fresh_world = World(self.scenario, MockJudge())
+        s0 = fresh_world.audit_state("auditor")
+        self.world.reset()
+
+        current_producer_view = self.world.observe("producer")
+        producer_view = json.dumps(current_producer_view, ensure_ascii=False)
+        actor_events = self.world.export_events("voice_actor")
+        audit_events = self.world.export_events("auditor")
+        self.assertNotIn(secret, producer_view)
+        self.assertNotIn(secret, json.dumps(actor_events, ensure_ascii=False))
+        self.assertIn(secret, json.dumps(audit_events, ensure_ascii=False))
+        self.assertEqual([], actor_events)
+        self.assertNotIn("timeline_id", self.world.observe("producer"))
+        self.assertEqual(fresh_world.observe("producer"), current_producer_view)
+        self.assertEqual(s0, self.world.audit_state("auditor"))
+
+        before = self.world.audit_state("auditor")
+        refused = self.world.act(
+            Action(
+                kind="send_message",
+                actor="producer",
+                payload={"to": "director", "content": "尝试引用旧时间线。"},
+                decision=note(evidence_event_ids=(old_receipt["event_id"],)),
+            )
+        )
+        self.assertFalse(refused["accepted"])
+        self.assertEqual("unobservable_evidence", refused["result"]["refusal"]["code"])
+        self.assertEqual(before, self.world.audit_state("auditor"))
+
+        self.world.act(
+            action("send_message", "producer", to="director", content="当前时间线的新消息。")
+        )
+        events = self.world.export_events("auditor")
+        replayed = World.replay(self.scenario, events)
+        self.assertEqual(self.world.audit_state("auditor"), replayed.audit_state("auditor"))
+        self.assertEqual(events, replayed.export_events("auditor"))
 
     def test_replay_reconstructs_exact_final_state_without_calling_judge(self) -> None:
         self.complete_timeline()
@@ -227,12 +277,46 @@ class WorldTests(unittest.TestCase):
         self.assertEqual("voice_actor", informed.payload["to"])
         self.assertEqual(s0, self.world.audit_state("auditor"))
 
+    def test_action_receipt_hides_audit_diff_and_judge_details(self) -> None:
+        self.propose_and_accept()
+        self.submit()
+        receipt = self.world.act(action("advance_day", "producer"))
+        self.assertNotIn("state_diff", receipt)
+        self.assertNotIn("judge_records", receipt["result"])
+        self.assertEqual(["ok"], receipt["result"]["settlements"])
+
+        visible_event = self.world.export_events("producer")[-1]
+        self.assertNotIn("state_diff", visible_event)
+        self.assertNotIn("result", visible_event)
+        self.assertEqual(["ok"], visible_event["result_summary"]["settlements"])
+
+        audit_event = self.world.export_events("auditor")[-1]
+        self.assertIn("state_diff", audit_event)
+        self.assertIn("judge_records", audit_event["result"])
+
+    def test_decision_references_visible_event_and_marks_facts_as_self_reported(self) -> None:
+        message = self.world.act(
+            action("send_message", "producer", to="voice_actor", content="请确认档期。")
+        )
+        receipt = self.world.act(
+            Action(
+                kind="send_message",
+                actor="voice_actor",
+                payload={"to": "producer", "content": "今天可以录两小时。"},
+                decision=note(evidence_event_ids=(message["event_id"],)),
+            )
+        )
+        self.assertTrue(receipt["accepted"])
+        decision = self.world.export_events("auditor")[-1]["decision"]
+        self.assertEqual([message["event_id"]], decision["evidence_event_ids"])
+        self.assertEqual("actor_self_report", decision["known_facts_source"])
+
     def test_invalid_judge_output_is_explicit_failure_without_score(self) -> None:
         world = World(self.scenario, InvalidJudge())
         self.propose_and_accept(world)
         self.submit(world)
-        event = world.act(action("advance_day", "producer"))
-        record = event["result"]["judge_records"][0]
+        world.act(action("advance_day", "producer"))
+        record = world.export_events("auditor")[-1]["result"]["judge_records"][0]
         task = world.audit_state("auditor")["tasks"]["final_voice_take"]
         self.assertEqual("failed", record["status"])
         self.assertEqual("JudgeOutputError", record["error"]["type"])
@@ -241,6 +325,21 @@ class WorldTests(unittest.TestCase):
         self.assertIsNone(task["effective_hours"])
         replayed = World.replay(self.scenario, world.export_events("auditor"))
         self.assertEqual(world.audit_state("auditor"), replayed.audit_state("auditor"))
+
+    def test_judge_rejects_non_finite_effective_hours(self) -> None:
+        request = {
+            "claimed_hours": 2,
+            "evidence": [{"id": "ev-1"}],
+        }
+        base_verdict = {
+            "quality": "good",
+            "reason": "测试",
+            "evidence_ids": ["ev-1"],
+            "model_metadata": {"provider": "mock", "model": "test", "call_id": "1"},
+        }
+        for value in (math.nan, math.inf, -math.inf):
+            with self.subTest(value=value), self.assertRaises(JudgeOutputError):
+                validate_verdict(request, {"effective_hours": value, **base_verdict})
 
     def test_tampered_replay_fails_loudly(self) -> None:
         self.complete_timeline()

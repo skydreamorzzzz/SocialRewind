@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any, Protocol
 
 
@@ -49,6 +50,8 @@ def validate_verdict(request: dict[str, Any], verdict: object) -> dict[str, Any]
     hours = verdict["effective_hours"]
     if isinstance(hours, bool) or not isinstance(hours, (int, float)):
         raise JudgeOutputError("effective_hours 必须是数字")
+    if not math.isfinite(hours):
+        raise JudgeOutputError("effective_hours 必须是有限数字")
     if hours < 0 or hours > request["claimed_hours"]:
         raise JudgeOutputError("effective_hours 超出已提交工作量")
     if verdict["quality"] not in QUALITY_LEVELS:

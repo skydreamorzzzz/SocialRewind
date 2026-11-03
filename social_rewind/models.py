@@ -11,6 +11,8 @@ class DecisionNote:
     intent: str
     known_facts: tuple[str, ...]
     uncertainty: str
+    evidence_event_ids: tuple[int, ...] = ()
+    known_facts_source: str = "actor_self_report"
 
     def validate(self) -> None:
         if not self.intent.strip():
@@ -19,10 +21,20 @@ class DecisionNote:
             raise ValueError("decision.known_facts 至少包含一条非空事实")
         if not self.uncertainty.strip():
             raise ValueError("decision.uncertainty 不能为空")
+        if (
+            any(
+                isinstance(event_id, bool) or not isinstance(event_id, int) or event_id <= 0
+                for event_id in self.evidence_event_ids)
+            or len(set(self.evidence_event_ids)) != len(self.evidence_event_ids)
+        ):
+            raise ValueError("decision.evidence_event_ids 必须是不重复的正整数")
+        if self.known_facts_source != "actor_self_report":
+            raise ValueError("自由文本 known_facts 只能标记为 actor_self_report")
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
         value["known_facts"] = list(self.known_facts)
+        value["evidence_event_ids"] = list(self.evidence_event_ids)
         return value
 
     @classmethod
@@ -31,6 +43,8 @@ class DecisionNote:
             intent=str(value["intent"]),
             known_facts=tuple(str(item) for item in value["known_facts"]),
             uncertainty=str(value["uncertainty"]),
+            evidence_event_ids=tuple(value.get("evidence_event_ids", ())),
+            known_facts_source=str(value.get("known_facts_source", "actor_self_report")),
         )
         note.validate()
         return note

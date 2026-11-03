@@ -12,8 +12,18 @@ from .scenario import fictional_dubbing_scenario
 from .world import World
 
 
-def _note(intent: str, fact: str, uncertainty: str) -> DecisionNote:
-    return DecisionNote(intent=intent, known_facts=(fact,), uncertainty=uncertainty)
+def _note(
+    intent: str,
+    fact: str,
+    uncertainty: str,
+    evidence_event_ids: tuple[int, ...] = (),
+) -> DecisionNote:
+    return DecisionNote(
+        intent=intent,
+        known_facts=(fact,),
+        uncertainty=uncertainty,
+        evidence_event_ids=evidence_event_ids,
+    )
 
 
 def _act(world: World, kind: str, actor: str, payload: dict[str, object], note: DecisionNote) -> dict:
@@ -27,6 +37,8 @@ def run_demo(log_path: Path | None = None) -> None:
     scenario = fictional_dubbing_scenario()
     world = World(scenario, MockJudge())
     s0 = world.audit_state("auditor")
+    producer_observation = world.observe("producer")
+    actor_observation = world.observe("voice_actor")
     print(f"[S0] 第 {s0['day']} 天，可用预算 {s0['budget']['available']}，案例明确标记为虚构。")
 
     _act(
@@ -34,7 +46,22 @@ def run_demo(log_path: Path | None = None) -> None:
         "send_message",
         "producer",
         {"to": "voice_actor", "content": "发布窗口今天关闭；你能否用两小时完成重录？"},
-        _note("我想先确认关键档期。", "演员明天没有公开档期。", "我不知道她今天的嗓音状态。"),
+        _note(
+            "我想先确认关键档期。",
+            producer_observation["public_facts"][1],
+            "我不知道她今天的档期。",
+        ),
+    )
+    reply = _act(
+        world,
+        "send_message",
+        "voice_actor",
+        {"to": "producer", "content": "我今天可以安排两小时，明天没有档期。"},
+        _note(
+            "我想明确自己的可用档期。",
+            actor_observation["self"]["private_facts"][0],
+            "我不确定两小时能否达到目标质量。",
+        ),
     )
     print(f"[交涉] 私信已送达；模拟日仍为 {world.observe('producer')['day']}。")
 
@@ -48,19 +75,29 @@ def run_demo(log_path: Path | None = None) -> None:
             "amount": 300,
             "terms": "今天完成两小时重录，目标质量 good。",
         },
-        _note("我愿意用项目预算换取按时交付。", "当前可用预算 1000 元。", "Judge 尚未评价成品。"),
+        _note(
+            "我愿意用项目预算换取按时交付。",
+            "演员在可见消息中自述今天可安排两小时。",
+            "Judge 尚未评价成品。",
+            (reply["event_id"],),
+        ),
     )
     commitment_id = proposed["result"]["commitment_id"]
-    _act(
+    accepted = _act(
         world,
         "respond_commitment",
         "voice_actor",
         {"commitment_id": commitment_id, "response": "accept"},
-        _note("我接受可在安全工时内完成的承诺。", "我今天适合录音两小时。", "成品质量仍需复核。"),
+        _note(
+            "我接受可在安全工时内完成的承诺。",
+            "制作人提出了 300 元的两小时录音承诺。",
+            "成品质量仍需复核。",
+            (proposed["event_id"],),
+        ),
     )
     print(f"[承诺] {commitment_id} 已接受，300 元从预留转为已支出。")
 
-    _act(
+    submitted = _act(
         world,
         "submit_work",
         "voice_actor",
@@ -75,18 +112,28 @@ def run_demo(log_path: Path | None = None) -> None:
                 }
             ],
         },
-        _note("我提交两小时内完成的最终对白。", "音频检查记录已经生成。", "主观质量由 Judge 判定。"),
+        _note(
+            "我提交两小时内完成的最终对白。",
+            "我已接受这项录音承诺。",
+            "主观质量由 Judge 判定。",
+            (accepted["event_id"],),
+        ),
     )
-    settled = _act(
+    _act(
         world,
         "advance_day",
         "producer",
         {},
-        _note("我明确结束今天并触发结算。", "执行者已提交证据。", "Judge 可能判定需要返工。"),
+        _note(
+            "我明确结束今天并触发结算。",
+            "执行者提交了我可见的工作证据。",
+            "Judge 可能判定需要返工。",
+            (submitted["event_id"],),
+        ),
     )
     final_state = world.audit_state("auditor")
     timeline = world.export_events("auditor")
-    verdict = settled["result"]["judge_records"][0]["output"]
+    verdict = timeline[-1]["result"]["judge_records"][0]["output"]
     print(
         f"[结算] 进入第 {final_state['day']} 天；质量={verdict['quality']}，"
         f"有效工时={verdict['effective_hours']}，任务={final_state['tasks']['final_voice_take']['status']}。"
