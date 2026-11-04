@@ -1,30 +1,47 @@
-# SocialRewind：可审查的最小社会世界
+# SocialRewind：双人轮回交易谈判
 
-这是研究“相同社会初始条件下，跨时间线经验能否改变选择”的世界基座。当前案例是**完全虚构的配音社项目**；本仓库只证明硬约束、信息权限、结算与回放机制可工作，不宣称发现了社会策略。
+这是研究“相同社会初始条件下，双方保留各自合法前世记忆后是否改变选择”的最小科研原型。当前主案例是**完全虚构的二手手机交易**：一个 Buyer、一个 Seller、一个商品，最多 20 轮。两次谈判只能展示机制，不能证明策略学习有效。
+
+## 最短运行
 
 ```powershell
-# Python 3.11+
-python -m social_rewind.demo
+# Python 3.11+；纯标准库，离线演示不联网
+python -m social_rewind.trade_demo --log examples/trade_offline_run.json
 python -m unittest discover -s tests -v
 ```
 
-写出脱敏的虚构演示日志：
+真实 OpenAI-compatible 模型：
 
 ```powershell
-python -m social_rewind.demo --log examples/demo_log.jsonl
+$env:SOCIALREWIND_API_BASE="https://your-api.example/v1"
+$env:SOCIALREWIND_MODEL="your-model"
+$env:SOCIALREWIND_API_KEY="..."
+python -m social_rewind.trade_demo --live --log examples/trade_live_run.json
 ```
 
-## 最小架构
+若服务的推理模式会耗尽结构化输出预算，可显式加 `--disable-thinking`。也可用 `--api-key-env DEEPSEEK_API_KEY` 指向其他已配置变量；密钥不会写入日志。原配音社基座演示仍可运行：`python -m social_rewind.demo`。
 
-- `models.py`：统一的 `Action(kind, actor, payload, decision)` 信封与短决策说明；自由文本事实明确标为角色自述，可引用当前时间线内可见的事件编号。
-- `world.py`：确定性执行预算、权限、档期、截止日期和状态差异；普通观察按角色及当前时间线过滤，完整跨时间线审计仅 `auditor` 可读。`act()` 只返回裁剪后的行动回执。
-- `judge.py`：受限 Judge 契约与离线确定性 `MockJudge`。Judge 只评有效工时和质量，不能修改硬状态。
-- `scenario.py`：三名目标不完全一致、私有信息不同的虚构角色，一个受预算与截止日期约束的共同任务。
-- JSONL 审计事件记录输入、合法性、结果、状态差异及 Judge 输入/输出；回放直接消费已记录判定，不再次调用模型。
-- `TimelineMemory` 不属于 `World`，因此能改变脚本策略但不能污染不可变初始状态 S0。
+## 最小规则与指标
+
+- 商品、挂牌价公开；Buyer 只知道自己的最高愿付价，Seller 只知道自己的最低接受价。
+- `message / offer / accept / reject / exit` 共用现有 `Action + DecisionNote` 信封。自然语言暗示不成交，只有明确接受当前对方有效报价才成交。
+- 价格、行动顺序、保留价、20 轮上限与终止状态由确定性代码执行；报价不会推进原有模拟日。
+- 成交价为 `p`、可交易剩余为 `Z = buyer_max - seller_min`：原始效用分别为 `buyer_max-p` 与 `p-seller_min`，归一化效用为各自效用除以 `Z`，交易质量 `Q = 4*u_b*u_s`，轮次效率为 `gamma^(rounds-1)`。指标分别保留，不合成单一总分。
+
+## 架构与轮回边界
+
+- `trade.py`：独立的轻量交易领域、角色观察、完整审计、精确 reset、授权记忆和确定性 replay；未把交易逻辑塞入原有 `world.py`。
+- `llm.py`：最小 OpenAI-compatible `chat/completions` 客户端，配置 API、模型与密钥；不记录鉴权头。
+- `negotiation.py`：两角色 Runner、离线 ScriptedAgent、严格 JSON LLM Agent；格式最多修复一次，非法世界行动显式失败。
+- `trade_demo.py`：`Timeline 1 → Rewind → Timeline 2`。第二世双方都知道彼此重生，但各自只获得上一世亲眼见过的事件、自己的决策说明、自己的效用与私人价格。
+- 模型调用输入、输出、元数据和世界事件分开审计；回放只消费已记录的结构化行动，不再次请求模型。
+
+## AgenticPay 参考与差异
+
+任务设定与评价定义参考 [AgenticPay 论文](https://arxiv.org/abs/2602.06008) 及其 [`Task1_basic_price_negotiation`](https://github.com/SAIL-Research-Lab/AgenticPay)。本项目仅采用双边保留价、20 轮上限、原始/归一化效用、Nash 型交易质量与轮次折扣；没有复制其环境注册、多模态、合同模式、任务集或加权总分。SocialRewind 额外强调事件权限、S0 重置、双方轮回记忆隔离与精确回放。
 
 ## 明确局限
 
-没有实时多 Agent 编排、真实 LLM 适配器、数据库、Web UI、并发行动或长期日志存储。身份由调用方传入，尚无密码学认证；JSONL 需要由实验运行器妥善保存。当前结算是单任务、按天批处理，服务于可复现实验演示而非生产系统。
+没有身份认证、数据库、Web UI、并发市场、长期记忆压缩或自动策略优化。真实模型输出仍可能格式错误或提出非法行动，此时实验会显式停止；单次两世结果不具统计意义。仓库中的 live 日志全部是虚构案例，但包含完整模型提示与响应，应按审计数据对待。
 
 详见 [完成报告](COMPLETION_REPORT.md)。
