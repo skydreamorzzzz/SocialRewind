@@ -103,6 +103,15 @@ def render_rebirth_prompt(memory: TradeMemory, counterpart_role: str) -> str:
 """
 
 
+def render_control_prompt() -> str:
+    return """【重置后的对照谈判】
+
+世界已经恢复到与第一场谈判完全相同的初始状态。你知道实验发生过一次重置，对方也知道这一点。
+但是，你和对方都没有保留任何可用的前世经历：没有上一场的消息、报价、结果、决策说明或经验总结。
+因此你不能引用或猜称上一场具体发生过什么。请只根据当前商品、规则、自己的私人价格和本场实际观察自主谈判。
+"""
+
+
 class ScriptedAgent:
     def __init__(self, turns: list[AgentTurn]) -> None:
         self._initial_turns = list(turns)
@@ -146,8 +155,10 @@ class LLMNegotiationAgent:
             if role == "buyer"
             else f"你的私人最低接受价是 {context['private']['minimum_price']} 元，正式报价或接受不得低于它。"
         )
-        rebirth = render_rebirth_prompt(memory, counterpart) if memory is not None else (
-            "【第一世】你没有前世记忆。这是一场新的谈判。"
+        rebirth = (
+            render_rebirth_prompt(memory, counterpart)
+            if memory is not None
+            else context.get("experiment_context", "【第一世】你没有前世记忆。这是一场新的谈判。")
         )
         schema = """每次只输出一个 JSON 对象，禁止 Markdown：
 {
@@ -309,6 +320,7 @@ class NegotiationRunner:
         seller: NegotiationAgent,
         *,
         memories: dict[str, TradeMemory] | None = None,
+        session_context: str | None = None,
         on_turn: Callable[[str, AgentTurn, dict[str, Any]], None] | None = None,
     ) -> NegotiationRun:
         memory_map = memories or {}
@@ -319,7 +331,10 @@ class NegotiationRunner:
             memory = memory_map.get(role)
             if memory is not None and memory.role != role:
                 raise PermissionError("记忆所有者与注入角色不一致")
-            agent.start(role, world.scenario_context(role), memory)
+            context = world.scenario_context(role)
+            if session_context is not None:
+                context["experiment_context"] = session_context
+            agent.start(role, context, memory)
 
         calls: list[dict[str, Any]] = []
         receipts: list[dict[str, Any]] = []

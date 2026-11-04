@@ -7,6 +7,7 @@
 ```powershell
 # Python 3.11+；纯标准库，离线演示不联网
 python -m social_rewind.trade_demo --log examples/trade_offline_run.json
+python -m social_rewind.trade_demo --compare --log examples/trade_compare_offline.json
 python -m unittest discover -s tests -v
 ```
 
@@ -16,7 +17,7 @@ python -m unittest discover -s tests -v
 $env:SOCIALREWIND_API_BASE="https://your-api.example/v1"
 $env:SOCIALREWIND_MODEL="your-model"
 $env:SOCIALREWIND_API_KEY="..."
-python -m social_rewind.trade_demo --live --log examples/trade_live_run.json
+python -m social_rewind.trade_demo --compare --live --log examples/trade_compare_live.json
 ```
 
 若服务的推理模式会耗尽结构化输出预算，可显式加 `--disable-thinking`。也可用 `--api-key-env DEEPSEEK_API_KEY` 指向其他已配置变量；密钥不会写入日志。原配音社基座演示仍可运行：`python -m social_rewind.demo`。
@@ -33,8 +34,10 @@ python -m social_rewind.trade_demo --live --log examples/trade_live_run.json
 - `trade.py`：独立的轻量交易领域、角色观察、完整审计、精确 reset、授权记忆和确定性 replay；未把交易逻辑塞入原有 `world.py`。
 - `llm.py`：最小 OpenAI-compatible `chat/completions` 客户端，配置 API、模型与密钥；不记录鉴权头。
 - `negotiation.py`：两角色 Runner、离线 ScriptedAgent、严格 JSON LLM Agent；格式最多修复一次，非法世界行动显式失败。
-- `trade_demo.py`：`Timeline 1 → Rewind → Timeline 2`。第二世双方都知道彼此重生，但各自只获得上一世亲眼见过的事件、自己的决策说明、自己的效用与私人价格。
+- `trade_demo.py`：保留原有 `Timeline 1 → Rewind` 演示；`--compare` 从同一 Timeline 1 派生两个独立世界：Control 知道发生过重置但没有可用前世经历，Rewind 双方获得各自合法记忆。
 - 模型调用输入、输出、元数据和世界事件分开审计；回放只消费已记录的结构化行动，不再次请求模型。
+
+Control 与 Rewind 使用相同商品、估值、规则、模型参数和轮数上限，并各自创建全新 Agent 会话。该设计仍同时改变了“记忆内容”和“轮回叙事情境”，且单次 API 采样不能排除模型随机性；详见 [对照实验记录](EXPERIMENT_CONTROL.md)。
 
 ## AgenticPay 参考与差异
 
@@ -44,4 +47,4 @@ python -m social_rewind.trade_demo --live --log examples/trade_live_run.json
 
 没有身份认证、数据库、Web UI、并发市场、长期记忆压缩或自动策略优化。真实模型输出仍可能格式错误或提出非法行动，此时实验会显式停止；单次两世结果不具统计意义。仓库中的 live 日志全部是虚构案例，但包含完整模型提示与响应，应按审计数据对待。
 
-详见 [完成报告](COMPLETION_REPORT.md)。
+详见 [完成报告](COMPLETION_REPORT.md) 与 [对照实验记录](EXPERIMENT_CONTROL.md)。

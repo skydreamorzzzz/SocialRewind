@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 import json
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 
 from social_rewind.models import Action, DecisionNote
 from social_rewind.negotiation import (
@@ -11,6 +13,7 @@ from social_rewind.negotiation import (
     LLMNegotiationAgent,
     NegotiationRunner,
     ScriptedAgent,
+    render_control_prompt,
     render_rebirth_prompt,
 )
 from social_rewind.trade import (
@@ -19,7 +22,7 @@ from social_rewind.trade import (
     TradeWorld,
     fictional_phone_trade,
 )
-from social_rewind.trade_demo import run_demo
+from social_rewind.trade_demo import run_compare_demo, run_demo
 
 
 def note(
@@ -62,9 +65,11 @@ class FakeClient:
     def __init__(self, outputs: list[str]) -> None:
         self.outputs = list(outputs)
         self.calls = 0
+        self.requests: list[list[dict[str, str]]] = []
 
     def complete(self, messages: list[dict[str, str]]) -> tuple[str, dict]:
         self.calls += 1
+        self.requests.append(copy.deepcopy(messages))
         if not self.outputs:
             raise AssertionError("FakeClient 没有剩余输出")
         output = self.outputs.pop(0)
@@ -168,6 +173,27 @@ class TradeWorldTests(unittest.TestCase):
     def test_live_demo_never_silently_falls_back_to_script(self) -> None:
         with self.assertRaisesRegex(ValueError, "必须显式提供模型客户端"):
             run_demo(live=True, client=None)
+        with self.assertRaisesRegex(ValueError, "必须显式提供模型客户端"):
+            run_compare_demo(live=True, client=None)
+
+    def test_offline_compare_uses_same_s0_and_isolates_control(self) -> None:
+        with redirect_stdout(StringIO()):
+            result = run_compare_demo(live=False)
+        self.assertTrue(result["s0_equal"])
+        self.assertTrue(result["model_config_equal"])
+        self.assertFalse(result["control"]["memory_injected"])
+        self.assertTrue(result["rewind"]["memory_injected"])
+        self.assertEqual(
+            result["timeline_1"]["metrics"], result["control"]["metrics"]
+        )
+        self.assertNotEqual(
+            result["control"]["metrics"], result["rewind"]["metrics"]
+        )
+        self.assertNotIn("3700 元成交", result["control"]["context"])
+        self.assertIn("没有保留任何可用的前世经历", result["control"]["context"])
+        self.assertTrue(
+            all(branch["replay_verified"] for branch in result["audit_worlds"].values())
+        )
 
     def test_role_memory_excludes_opponent_decision_and_private_value(self) -> None:
         self.world.act(act("offer", "buyer", text="3400。", price=3400))
@@ -289,6 +315,20 @@ class LLMAgentTests(unittest.TestCase):
             agent.respond(self.world.observe("buyer"))
         self.assertEqual(2, len(caught.exception.call_records))
         self.assertEqual(before, self.world.audit_state(AUDITOR))
+
+    def test_control_prompt_discloses_reset_but_no_prior_history(self) -> None:
+        client = FakeClient([self.valid_output()])
+        agent = LLMNegotiationAgent(client)
+        context = self.world.scenario_context("buyer")
+        context["experiment_context"] = render_control_prompt()
+        agent.start("buyer", context, None)
+        agent.respond(self.world.observe("buyer"))
+        self.assertEqual(1, client.calls)
+        request_messages = client.requests[0]
+        self.assertIn("世界已经恢复", request_messages[0]["content"])
+        self.assertIn("没有保留任何可用的前世经历", request_messages[0]["content"])
+        self.assertNotIn("上一世最终以", request_messages[0]["content"])
+        self.assertNotIn("o0004", request_messages[0]["content"])
 
 
 if __name__ == "__main__":

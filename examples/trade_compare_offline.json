@@ -1,0 +1,2116 @@
+{
+  "audit_worlds": {
+    "control": {
+      "events": [
+        {
+          "accepted": true,
+          "actor": "buyer",
+          "decision": {
+            "evidence_event_ids": [],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "挂牌价是 4200 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 1,
+          "input": {
+            "price": 3400,
+            "text": "我先报 3400 元。"
+          },
+          "kind": "offer",
+          "result": {
+            "offer_id": "o0001",
+            "price": 3400,
+            "rounds": 1,
+            "status": "active"
+          },
+          "result_summary": {
+            "offer_id": "o0001",
+            "price": 3400,
+            "rounds": 1,
+            "status": "active"
+          },
+          "sequence": 1,
+          "state_diff": [
+            {
+              "after": "o0001",
+              "before": "o0000",
+              "path": "$.active_offer_id"
+            },
+            {
+              "after": "seller",
+              "before": "buyer",
+              "path": "$.next_actor"
+            },
+            {
+              "after": 1,
+              "before": 0,
+              "path": "$.offer_serial"
+            },
+            {
+              "after": "superseded",
+              "before": "active",
+              "path": "$.offers.o0000.status"
+            },
+            {
+              "after": {
+                "actor": "buyer",
+                "id": "o0001",
+                "price": 3400,
+                "round": 1,
+                "source": "offer",
+                "status": "active"
+              },
+              "before": null,
+              "path": "$.offers.o0001"
+            },
+            {
+              "after": 1,
+              "before": 0,
+              "path": "$.rounds"
+            },
+            {
+              "after": 1,
+              "before": 0,
+              "path": "$.turns_taken"
+            }
+          ],
+          "timeline_id": 1,
+          "timeline_sequence": 1,
+          "visibility": [
+            "buyer",
+            "seller"
+          ]
+        },
+        {
+          "accepted": true,
+          "actor": "seller",
+          "decision": {
+            "evidence_event_ids": [
+              1
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "买方正式报价 3400 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 2,
+          "input": {
+            "price": 4000,
+            "text": "3400 太低，我正式报价 4000 元。"
+          },
+          "kind": "offer",
+          "result": {
+            "offer_id": "o0002",
+            "price": 4000,
+            "rounds": 1,
+            "status": "active"
+          },
+          "result_summary": {
+            "offer_id": "o0002",
+            "price": 4000,
+            "rounds": 1,
+            "status": "active"
+          },
+          "sequence": 2,
+          "state_diff": [
+            {
+              "after": "o0002",
+              "before": "o0001",
+              "path": "$.active_offer_id"
+            },
+            {
+              "after": "buyer",
+              "before": "seller",
+              "path": "$.next_actor"
+            },
+            {
+              "after": 2,
+              "before": 1,
+              "path": "$.offer_serial"
+            },
+            {
+              "after": "superseded",
+              "before": "active",
+              "path": "$.offers.o0001.status"
+            },
+            {
+              "after": {
+                "actor": "seller",
+                "id": "o0002",
+                "price": 4000,
+                "round": 1,
+                "source": "offer",
+                "status": "active"
+              },
+              "before": null,
+              "path": "$.offers.o0002"
+            },
+            {
+              "after": 2,
+              "before": 1,
+              "path": "$.turns_taken"
+            }
+          ],
+          "timeline_id": 1,
+          "timeline_sequence": 2,
+          "visibility": [
+            "buyer",
+            "seller"
+          ]
+        },
+        {
+          "accepted": true,
+          "actor": "buyer",
+          "decision": {
+            "evidence_event_ids": [
+              2
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "卖方刚才正式报价 4000 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 3,
+          "input": {
+            "price": 3600,
+            "text": "我可以提高到 3600 元。"
+          },
+          "kind": "offer",
+          "result": {
+            "offer_id": "o0003",
+            "price": 3600,
+            "rounds": 2,
+            "status": "active"
+          },
+          "result_summary": {
+            "offer_id": "o0003",
+            "price": 3600,
+            "rounds": 2,
+            "status": "active"
+          },
+          "sequence": 3,
+          "state_diff": [
+            {
+              "after": "o0003",
+              "before": "o0002",
+              "path": "$.active_offer_id"
+            },
+            {
+              "after": "seller",
+              "before": "buyer",
+              "path": "$.next_actor"
+            },
+            {
+              "after": 3,
+              "before": 2,
+              "path": "$.offer_serial"
+            },
+            {
+              "after": "superseded",
+              "before": "active",
+              "path": "$.offers.o0002.status"
+            },
+            {
+              "after": {
+                "actor": "buyer",
+                "id": "o0003",
+                "price": 3600,
+                "round": 2,
+                "source": "offer",
+                "status": "active"
+              },
+              "before": null,
+              "path": "$.offers.o0003"
+            },
+            {
+              "after": 2,
+              "before": 1,
+              "path": "$.rounds"
+            },
+            {
+              "after": 3,
+              "before": 2,
+              "path": "$.turns_taken"
+            }
+          ],
+          "timeline_id": 1,
+          "timeline_sequence": 3,
+          "visibility": [
+            "buyer",
+            "seller"
+          ]
+        },
+        {
+          "accepted": true,
+          "actor": "seller",
+          "decision": {
+            "evidence_event_ids": [
+              3
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "买方已提高到 3600 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 4,
+          "input": {
+            "price": 3700,
+            "text": "我最后可以到 3700 元。"
+          },
+          "kind": "offer",
+          "result": {
+            "offer_id": "o0004",
+            "price": 3700,
+            "rounds": 2,
+            "status": "active"
+          },
+          "result_summary": {
+            "offer_id": "o0004",
+            "price": 3700,
+            "rounds": 2,
+            "status": "active"
+          },
+          "sequence": 4,
+          "state_diff": [
+            {
+              "after": "o0004",
+              "before": "o0003",
+              "path": "$.active_offer_id"
+            },
+            {
+              "after": "buyer",
+              "before": "seller",
+              "path": "$.next_actor"
+            },
+            {
+              "after": 4,
+              "before": 3,
+              "path": "$.offer_serial"
+            },
+            {
+              "after": "superseded",
+              "before": "active",
+              "path": "$.offers.o0003.status"
+            },
+            {
+              "after": {
+                "actor": "seller",
+                "id": "o0004",
+                "price": 3700,
+                "round": 2,
+                "source": "offer",
+                "status": "active"
+              },
+              "before": null,
+              "path": "$.offers.o0004"
+            },
+            {
+              "after": 4,
+              "before": 3,
+              "path": "$.turns_taken"
+            }
+          ],
+          "timeline_id": 1,
+          "timeline_sequence": 4,
+          "visibility": [
+            "buyer",
+            "seller"
+          ]
+        },
+        {
+          "accepted": true,
+          "actor": "buyer",
+          "decision": {
+            "evidence_event_ids": [
+              4
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "当前有效报价 o0004 是 3700 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 5,
+          "input": {
+            "offer_id": "o0004",
+            "text": "我明确接受你 3700 元的有效报价。"
+          },
+          "kind": "accept",
+          "result": {
+            "deal_price": 3700,
+            "offer_id": "o0004",
+            "rounds": 3,
+            "status": "deal"
+          },
+          "result_summary": {
+            "deal_price": 3700,
+            "offer_id": "o0004",
+            "rounds": 3,
+            "status": "deal"
+          },
+          "sequence": 5,
+          "state_diff": [
+            {
+              "after": null,
+              "before": "o0004",
+              "path": "$.active_offer_id"
+            },
+            {
+              "after": 3700,
+              "before": null,
+              "path": "$.deal_price"
+            },
+            {
+              "after": null,
+              "before": "buyer",
+              "path": "$.next_actor"
+            },
+            {
+              "after": "accepted",
+              "before": "active",
+              "path": "$.offers.o0004.status"
+            },
+            {
+              "after": 3,
+              "before": 2,
+              "path": "$.rounds"
+            },
+            {
+              "after": "deal",
+              "before": "negotiating",
+              "path": "$.status"
+            },
+            {
+              "after": "explicit_acceptance",
+              "before": null,
+              "path": "$.termination_reason"
+            },
+            {
+              "after": 5,
+              "before": 4,
+              "path": "$.turns_taken"
+            }
+          ],
+          "timeline_id": 1,
+          "timeline_sequence": 5,
+          "visibility": [
+            "buyer",
+            "seller"
+          ]
+        }
+      ],
+      "final_state": {
+        "active_offer_id": null,
+        "deal_price": 3700,
+        "next_actor": null,
+        "offer_serial": 4,
+        "offers": {
+          "o0000": {
+            "actor": "seller",
+            "id": "o0000",
+            "price": 4200,
+            "round": 0,
+            "source": "listing",
+            "status": "superseded"
+          },
+          "o0001": {
+            "actor": "buyer",
+            "id": "o0001",
+            "price": 3400,
+            "round": 1,
+            "source": "offer",
+            "status": "superseded"
+          },
+          "o0002": {
+            "actor": "seller",
+            "id": "o0002",
+            "price": 4000,
+            "round": 1,
+            "source": "offer",
+            "status": "superseded"
+          },
+          "o0003": {
+            "actor": "buyer",
+            "id": "o0003",
+            "price": 3600,
+            "round": 2,
+            "source": "offer",
+            "status": "superseded"
+          },
+          "o0004": {
+            "actor": "seller",
+            "id": "o0004",
+            "price": 3700,
+            "round": 2,
+            "source": "offer",
+            "status": "accepted"
+          }
+        },
+        "rounds": 3,
+        "scenario_id": "fictional-used-phone-v1",
+        "status": "deal",
+        "termination_reason": "explicit_acceptance",
+        "turns_taken": 5
+      },
+      "replay_verified": true
+    },
+    "rewind": {
+      "events": [
+        {
+          "accepted": true,
+          "actor": "buyer",
+          "decision": {
+            "evidence_event_ids": [],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "上一世最终以 3700 元成交。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 1,
+          "input": {
+            "price": 3550,
+            "text": "我们都记得上一世。这次我直接报 3550 元。"
+          },
+          "kind": "offer",
+          "result": {
+            "offer_id": "o0001",
+            "price": 3550,
+            "rounds": 1,
+            "status": "active"
+          },
+          "result_summary": {
+            "offer_id": "o0001",
+            "price": 3550,
+            "rounds": 1,
+            "status": "active"
+          },
+          "sequence": 1,
+          "state_diff": [
+            {
+              "after": "o0001",
+              "before": "o0000",
+              "path": "$.active_offer_id"
+            },
+            {
+              "after": "seller",
+              "before": "buyer",
+              "path": "$.next_actor"
+            },
+            {
+              "after": 1,
+              "before": 0,
+              "path": "$.offer_serial"
+            },
+            {
+              "after": "superseded",
+              "before": "active",
+              "path": "$.offers.o0000.status"
+            },
+            {
+              "after": {
+                "actor": "buyer",
+                "id": "o0001",
+                "price": 3550,
+                "round": 1,
+                "source": "offer",
+                "status": "active"
+              },
+              "before": null,
+              "path": "$.offers.o0001"
+            },
+            {
+              "after": 1,
+              "before": 0,
+              "path": "$.rounds"
+            },
+            {
+              "after": 1,
+              "before": 0,
+              "path": "$.turns_taken"
+            }
+          ],
+          "timeline_id": 1,
+          "timeline_sequence": 1,
+          "visibility": [
+            "buyer",
+            "seller"
+          ]
+        },
+        {
+          "accepted": true,
+          "actor": "seller",
+          "decision": {
+            "evidence_event_ids": [
+              1
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "买方这一世开价 3550 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 2,
+          "input": {
+            "price": 3750,
+            "text": "我也记得。我们少绕弯，我报 3750 元。"
+          },
+          "kind": "offer",
+          "result": {
+            "offer_id": "o0002",
+            "price": 3750,
+            "rounds": 1,
+            "status": "active"
+          },
+          "result_summary": {
+            "offer_id": "o0002",
+            "price": 3750,
+            "rounds": 1,
+            "status": "active"
+          },
+          "sequence": 2,
+          "state_diff": [
+            {
+              "after": "o0002",
+              "before": "o0001",
+              "path": "$.active_offer_id"
+            },
+            {
+              "after": "buyer",
+              "before": "seller",
+              "path": "$.next_actor"
+            },
+            {
+              "after": 2,
+              "before": 1,
+              "path": "$.offer_serial"
+            },
+            {
+              "after": "superseded",
+              "before": "active",
+              "path": "$.offers.o0001.status"
+            },
+            {
+              "after": {
+                "actor": "seller",
+                "id": "o0002",
+                "price": 3750,
+                "round": 1,
+                "source": "offer",
+                "status": "active"
+              },
+              "before": null,
+              "path": "$.offers.o0002"
+            },
+            {
+              "after": 2,
+              "before": 1,
+              "path": "$.turns_taken"
+            }
+          ],
+          "timeline_id": 1,
+          "timeline_sequence": 2,
+          "visibility": [
+            "buyer",
+            "seller"
+          ]
+        },
+        {
+          "accepted": true,
+          "actor": "buyer",
+          "decision": {
+            "evidence_event_ids": [
+              2
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "卖方这一世正式报价 3750 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 3,
+          "input": {
+            "price": 3650,
+            "text": "我这次到 3650 元，希望更快结束。"
+          },
+          "kind": "offer",
+          "result": {
+            "offer_id": "o0003",
+            "price": 3650,
+            "rounds": 2,
+            "status": "active"
+          },
+          "result_summary": {
+            "offer_id": "o0003",
+            "price": 3650,
+            "rounds": 2,
+            "status": "active"
+          },
+          "sequence": 3,
+          "state_diff": [
+            {
+              "after": "o0003",
+              "before": "o0002",
+              "path": "$.active_offer_id"
+            },
+            {
+              "after": "seller",
+              "before": "buyer",
+              "path": "$.next_actor"
+            },
+            {
+              "after": 3,
+              "before": 2,
+              "path": "$.offer_serial"
+            },
+            {
+              "after": "superseded",
+              "before": "active",
+              "path": "$.offers.o0002.status"
+            },
+            {
+              "after": {
+                "actor": "buyer",
+                "id": "o0003",
+                "price": 3650,
+                "round": 2,
+                "source": "offer",
+                "status": "active"
+              },
+              "before": null,
+              "path": "$.offers.o0003"
+            },
+            {
+              "after": 2,
+              "before": 1,
+              "path": "$.rounds"
+            },
+            {
+              "after": 3,
+              "before": 2,
+              "path": "$.turns_taken"
+            }
+          ],
+          "timeline_id": 1,
+          "timeline_sequence": 3,
+          "visibility": [
+            "buyer",
+            "seller"
+          ]
+        },
+        {
+          "accepted": true,
+          "actor": "seller",
+          "decision": {
+            "evidence_event_ids": [
+              3
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "当前有效报价 o0003 是 3650 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 4,
+          "input": {
+            "offer_id": "o0003",
+            "text": "我明确接受你 3650 元的有效报价。"
+          },
+          "kind": "accept",
+          "result": {
+            "deal_price": 3650,
+            "offer_id": "o0003",
+            "rounds": 2,
+            "status": "deal"
+          },
+          "result_summary": {
+            "deal_price": 3650,
+            "offer_id": "o0003",
+            "rounds": 2,
+            "status": "deal"
+          },
+          "sequence": 4,
+          "state_diff": [
+            {
+              "after": null,
+              "before": "o0003",
+              "path": "$.active_offer_id"
+            },
+            {
+              "after": 3650,
+              "before": null,
+              "path": "$.deal_price"
+            },
+            {
+              "after": null,
+              "before": "seller",
+              "path": "$.next_actor"
+            },
+            {
+              "after": "accepted",
+              "before": "active",
+              "path": "$.offers.o0003.status"
+            },
+            {
+              "after": "deal",
+              "before": "negotiating",
+              "path": "$.status"
+            },
+            {
+              "after": "explicit_acceptance",
+              "before": null,
+              "path": "$.termination_reason"
+            },
+            {
+              "after": 4,
+              "before": 3,
+              "path": "$.turns_taken"
+            }
+          ],
+          "timeline_id": 1,
+          "timeline_sequence": 4,
+          "visibility": [
+            "buyer",
+            "seller"
+          ]
+        }
+      ],
+      "final_state": {
+        "active_offer_id": null,
+        "deal_price": 3650,
+        "next_actor": null,
+        "offer_serial": 3,
+        "offers": {
+          "o0000": {
+            "actor": "seller",
+            "id": "o0000",
+            "price": 4200,
+            "round": 0,
+            "source": "listing",
+            "status": "superseded"
+          },
+          "o0001": {
+            "actor": "buyer",
+            "id": "o0001",
+            "price": 3550,
+            "round": 1,
+            "source": "offer",
+            "status": "superseded"
+          },
+          "o0002": {
+            "actor": "seller",
+            "id": "o0002",
+            "price": 3750,
+            "round": 1,
+            "source": "offer",
+            "status": "superseded"
+          },
+          "o0003": {
+            "actor": "buyer",
+            "id": "o0003",
+            "price": 3650,
+            "round": 2,
+            "source": "offer",
+            "status": "accepted"
+          }
+        },
+        "rounds": 2,
+        "scenario_id": "fictional-used-phone-v1",
+        "status": "deal",
+        "termination_reason": "explicit_acceptance",
+        "turns_taken": 4
+      },
+      "replay_verified": true
+    },
+    "timeline_1": {
+      "events": [
+        {
+          "accepted": true,
+          "actor": "buyer",
+          "decision": {
+            "evidence_event_ids": [],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "挂牌价是 4200 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 1,
+          "input": {
+            "price": 3400,
+            "text": "我先报 3400 元。"
+          },
+          "kind": "offer",
+          "result": {
+            "offer_id": "o0001",
+            "price": 3400,
+            "rounds": 1,
+            "status": "active"
+          },
+          "result_summary": {
+            "offer_id": "o0001",
+            "price": 3400,
+            "rounds": 1,
+            "status": "active"
+          },
+          "sequence": 1,
+          "state_diff": [
+            {
+              "after": "o0001",
+              "before": "o0000",
+              "path": "$.active_offer_id"
+            },
+            {
+              "after": "seller",
+              "before": "buyer",
+              "path": "$.next_actor"
+            },
+            {
+              "after": 1,
+              "before": 0,
+              "path": "$.offer_serial"
+            },
+            {
+              "after": "superseded",
+              "before": "active",
+              "path": "$.offers.o0000.status"
+            },
+            {
+              "after": {
+                "actor": "buyer",
+                "id": "o0001",
+                "price": 3400,
+                "round": 1,
+                "source": "offer",
+                "status": "active"
+              },
+              "before": null,
+              "path": "$.offers.o0001"
+            },
+            {
+              "after": 1,
+              "before": 0,
+              "path": "$.rounds"
+            },
+            {
+              "after": 1,
+              "before": 0,
+              "path": "$.turns_taken"
+            }
+          ],
+          "timeline_id": 1,
+          "timeline_sequence": 1,
+          "visibility": [
+            "buyer",
+            "seller"
+          ]
+        },
+        {
+          "accepted": true,
+          "actor": "seller",
+          "decision": {
+            "evidence_event_ids": [
+              1
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "买方正式报价 3400 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 2,
+          "input": {
+            "price": 4000,
+            "text": "3400 太低，我正式报价 4000 元。"
+          },
+          "kind": "offer",
+          "result": {
+            "offer_id": "o0002",
+            "price": 4000,
+            "rounds": 1,
+            "status": "active"
+          },
+          "result_summary": {
+            "offer_id": "o0002",
+            "price": 4000,
+            "rounds": 1,
+            "status": "active"
+          },
+          "sequence": 2,
+          "state_diff": [
+            {
+              "after": "o0002",
+              "before": "o0001",
+              "path": "$.active_offer_id"
+            },
+            {
+              "after": "buyer",
+              "before": "seller",
+              "path": "$.next_actor"
+            },
+            {
+              "after": 2,
+              "before": 1,
+              "path": "$.offer_serial"
+            },
+            {
+              "after": "superseded",
+              "before": "active",
+              "path": "$.offers.o0001.status"
+            },
+            {
+              "after": {
+                "actor": "seller",
+                "id": "o0002",
+                "price": 4000,
+                "round": 1,
+                "source": "offer",
+                "status": "active"
+              },
+              "before": null,
+              "path": "$.offers.o0002"
+            },
+            {
+              "after": 2,
+              "before": 1,
+              "path": "$.turns_taken"
+            }
+          ],
+          "timeline_id": 1,
+          "timeline_sequence": 2,
+          "visibility": [
+            "buyer",
+            "seller"
+          ]
+        },
+        {
+          "accepted": true,
+          "actor": "buyer",
+          "decision": {
+            "evidence_event_ids": [
+              2
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "卖方刚才正式报价 4000 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 3,
+          "input": {
+            "price": 3600,
+            "text": "我可以提高到 3600 元。"
+          },
+          "kind": "offer",
+          "result": {
+            "offer_id": "o0003",
+            "price": 3600,
+            "rounds": 2,
+            "status": "active"
+          },
+          "result_summary": {
+            "offer_id": "o0003",
+            "price": 3600,
+            "rounds": 2,
+            "status": "active"
+          },
+          "sequence": 3,
+          "state_diff": [
+            {
+              "after": "o0003",
+              "before": "o0002",
+              "path": "$.active_offer_id"
+            },
+            {
+              "after": "seller",
+              "before": "buyer",
+              "path": "$.next_actor"
+            },
+            {
+              "after": 3,
+              "before": 2,
+              "path": "$.offer_serial"
+            },
+            {
+              "after": "superseded",
+              "before": "active",
+              "path": "$.offers.o0002.status"
+            },
+            {
+              "after": {
+                "actor": "buyer",
+                "id": "o0003",
+                "price": 3600,
+                "round": 2,
+                "source": "offer",
+                "status": "active"
+              },
+              "before": null,
+              "path": "$.offers.o0003"
+            },
+            {
+              "after": 2,
+              "before": 1,
+              "path": "$.rounds"
+            },
+            {
+              "after": 3,
+              "before": 2,
+              "path": "$.turns_taken"
+            }
+          ],
+          "timeline_id": 1,
+          "timeline_sequence": 3,
+          "visibility": [
+            "buyer",
+            "seller"
+          ]
+        },
+        {
+          "accepted": true,
+          "actor": "seller",
+          "decision": {
+            "evidence_event_ids": [
+              3
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "买方已提高到 3600 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 4,
+          "input": {
+            "price": 3700,
+            "text": "我最后可以到 3700 元。"
+          },
+          "kind": "offer",
+          "result": {
+            "offer_id": "o0004",
+            "price": 3700,
+            "rounds": 2,
+            "status": "active"
+          },
+          "result_summary": {
+            "offer_id": "o0004",
+            "price": 3700,
+            "rounds": 2,
+            "status": "active"
+          },
+          "sequence": 4,
+          "state_diff": [
+            {
+              "after": "o0004",
+              "before": "o0003",
+              "path": "$.active_offer_id"
+            },
+            {
+              "after": "buyer",
+              "before": "seller",
+              "path": "$.next_actor"
+            },
+            {
+              "after": 4,
+              "before": 3,
+              "path": "$.offer_serial"
+            },
+            {
+              "after": "superseded",
+              "before": "active",
+              "path": "$.offers.o0003.status"
+            },
+            {
+              "after": {
+                "actor": "seller",
+                "id": "o0004",
+                "price": 3700,
+                "round": 2,
+                "source": "offer",
+                "status": "active"
+              },
+              "before": null,
+              "path": "$.offers.o0004"
+            },
+            {
+              "after": 4,
+              "before": 3,
+              "path": "$.turns_taken"
+            }
+          ],
+          "timeline_id": 1,
+          "timeline_sequence": 4,
+          "visibility": [
+            "buyer",
+            "seller"
+          ]
+        },
+        {
+          "accepted": true,
+          "actor": "buyer",
+          "decision": {
+            "evidence_event_ids": [
+              4
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "当前有效报价 o0004 是 3700 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 5,
+          "input": {
+            "offer_id": "o0004",
+            "text": "我明确接受你 3700 元的有效报价。"
+          },
+          "kind": "accept",
+          "result": {
+            "deal_price": 3700,
+            "offer_id": "o0004",
+            "rounds": 3,
+            "status": "deal"
+          },
+          "result_summary": {
+            "deal_price": 3700,
+            "offer_id": "o0004",
+            "rounds": 3,
+            "status": "deal"
+          },
+          "sequence": 5,
+          "state_diff": [
+            {
+              "after": null,
+              "before": "o0004",
+              "path": "$.active_offer_id"
+            },
+            {
+              "after": 3700,
+              "before": null,
+              "path": "$.deal_price"
+            },
+            {
+              "after": null,
+              "before": "buyer",
+              "path": "$.next_actor"
+            },
+            {
+              "after": "accepted",
+              "before": "active",
+              "path": "$.offers.o0004.status"
+            },
+            {
+              "after": 3,
+              "before": 2,
+              "path": "$.rounds"
+            },
+            {
+              "after": "deal",
+              "before": "negotiating",
+              "path": "$.status"
+            },
+            {
+              "after": "explicit_acceptance",
+              "before": null,
+              "path": "$.termination_reason"
+            },
+            {
+              "after": 5,
+              "before": 4,
+              "path": "$.turns_taken"
+            }
+          ],
+          "timeline_id": 1,
+          "timeline_sequence": 5,
+          "visibility": [
+            "buyer",
+            "seller"
+          ]
+        }
+      ],
+      "final_state": {
+        "active_offer_id": null,
+        "deal_price": 3700,
+        "next_actor": null,
+        "offer_serial": 4,
+        "offers": {
+          "o0000": {
+            "actor": "seller",
+            "id": "o0000",
+            "price": 4200,
+            "round": 0,
+            "source": "listing",
+            "status": "superseded"
+          },
+          "o0001": {
+            "actor": "buyer",
+            "id": "o0001",
+            "price": 3400,
+            "round": 1,
+            "source": "offer",
+            "status": "superseded"
+          },
+          "o0002": {
+            "actor": "seller",
+            "id": "o0002",
+            "price": 4000,
+            "round": 1,
+            "source": "offer",
+            "status": "superseded"
+          },
+          "o0003": {
+            "actor": "buyer",
+            "id": "o0003",
+            "price": 3600,
+            "round": 2,
+            "source": "offer",
+            "status": "superseded"
+          },
+          "o0004": {
+            "actor": "seller",
+            "id": "o0004",
+            "price": 3700,
+            "round": 2,
+            "source": "offer",
+            "status": "accepted"
+          }
+        },
+        "rounds": 3,
+        "scenario_id": "fictional-used-phone-v1",
+        "status": "deal",
+        "termination_reason": "explicit_acceptance",
+        "turns_taken": 5
+      },
+      "replay_verified": true
+    }
+  },
+  "control": {
+    "context": "【重置后的对照谈判】\n\n世界已经恢复到与第一场谈判完全相同的初始状态。你知道实验发生过一次重置，对方也知道这一点。\n但是，你和对方都没有保留任何可用的前世经历：没有上一场的消息、报价、结果、决策说明或经验总结。\n因此你不能引用或猜称上一场具体发生过什么。请只根据当前商品、规则、自己的私人价格和本场实际观察自主谈判。\n",
+    "key_excerpts": [
+      {
+        "actor": "buyer",
+        "decision_intent": "我想在自己的价格约束内推进谈判。",
+        "event_id": 1,
+        "input": {
+          "price": 3400,
+          "text": "我先报 3400 元。"
+        },
+        "kind": "offer"
+      },
+      {
+        "actor": "seller",
+        "decision_intent": "我想在自己的价格约束内推进谈判。",
+        "event_id": 2,
+        "input": {
+          "price": 4000,
+          "text": "3400 太低，我正式报价 4000 元。"
+        },
+        "kind": "offer"
+      },
+      {
+        "actor": "buyer",
+        "decision_intent": "我想在自己的价格约束内推进谈判。",
+        "event_id": 3,
+        "input": {
+          "price": 3600,
+          "text": "我可以提高到 3600 元。"
+        },
+        "kind": "offer"
+      },
+      {
+        "actor": "seller",
+        "decision_intent": "我想在自己的价格约束内推进谈判。",
+        "event_id": 4,
+        "input": {
+          "price": 3700,
+          "text": "我最后可以到 3700 元。"
+        },
+        "kind": "offer"
+      },
+      {
+        "actor": "buyer",
+        "decision_intent": "我想在自己的价格约束内推进谈判。",
+        "event_id": 5,
+        "input": {
+          "offer_id": "o0004",
+          "text": "我明确接受你 3700 元的有效报价。"
+        },
+        "kind": "accept"
+      }
+    ],
+    "memory_injected": false,
+    "metrics": {
+      "buyer_normalized_utility": 0.33333333,
+      "buyer_utility": 200,
+      "deal": true,
+      "deal_price": 3700,
+      "efficiency_discount": 0.9801,
+      "nash_quality": 0.88888889,
+      "rounds": 3,
+      "seller_normalized_utility": 0.66666667,
+      "seller_utility": 400,
+      "status": "deal"
+    },
+    "model_calls": [],
+    "receipts": [
+      {
+        "accepted": true,
+        "actor": "buyer",
+        "decision": {
+          "evidence_event_ids": [],
+          "intent": "我想在自己的价格约束内推进谈判。",
+          "known_facts": [
+            "挂牌价是 4200 元。"
+          ],
+          "known_facts_source": "actor_self_report",
+          "uncertainty": "我不确定对方下一步是否会让步。"
+        },
+        "event_id": 1,
+        "input": {
+          "price": 3400,
+          "text": "我先报 3400 元。"
+        },
+        "kind": "offer",
+        "result": {
+          "offer_id": "o0001",
+          "price": 3400,
+          "rounds": 1,
+          "status": "active"
+        },
+        "sequence": 1
+      },
+      {
+        "accepted": true,
+        "actor": "seller",
+        "decision": {
+          "evidence_event_ids": [
+            1
+          ],
+          "intent": "我想在自己的价格约束内推进谈判。",
+          "known_facts": [
+            "买方正式报价 3400 元。"
+          ],
+          "known_facts_source": "actor_self_report",
+          "uncertainty": "我不确定对方下一步是否会让步。"
+        },
+        "event_id": 2,
+        "input": {
+          "price": 4000,
+          "text": "3400 太低，我正式报价 4000 元。"
+        },
+        "kind": "offer",
+        "result": {
+          "offer_id": "o0002",
+          "price": 4000,
+          "rounds": 1,
+          "status": "active"
+        },
+        "sequence": 2
+      },
+      {
+        "accepted": true,
+        "actor": "buyer",
+        "decision": {
+          "evidence_event_ids": [
+            2
+          ],
+          "intent": "我想在自己的价格约束内推进谈判。",
+          "known_facts": [
+            "卖方刚才正式报价 4000 元。"
+          ],
+          "known_facts_source": "actor_self_report",
+          "uncertainty": "我不确定对方下一步是否会让步。"
+        },
+        "event_id": 3,
+        "input": {
+          "price": 3600,
+          "text": "我可以提高到 3600 元。"
+        },
+        "kind": "offer",
+        "result": {
+          "offer_id": "o0003",
+          "price": 3600,
+          "rounds": 2,
+          "status": "active"
+        },
+        "sequence": 3
+      },
+      {
+        "accepted": true,
+        "actor": "seller",
+        "decision": {
+          "evidence_event_ids": [
+            3
+          ],
+          "intent": "我想在自己的价格约束内推进谈判。",
+          "known_facts": [
+            "买方已提高到 3600 元。"
+          ],
+          "known_facts_source": "actor_self_report",
+          "uncertainty": "我不确定对方下一步是否会让步。"
+        },
+        "event_id": 4,
+        "input": {
+          "price": 3700,
+          "text": "我最后可以到 3700 元。"
+        },
+        "kind": "offer",
+        "result": {
+          "offer_id": "o0004",
+          "price": 3700,
+          "rounds": 2,
+          "status": "active"
+        },
+        "sequence": 4
+      },
+      {
+        "accepted": true,
+        "actor": "buyer",
+        "decision": {
+          "evidence_event_ids": [
+            4
+          ],
+          "intent": "我想在自己的价格约束内推进谈判。",
+          "known_facts": [
+            "当前有效报价 o0004 是 3700 元。"
+          ],
+          "known_facts_source": "actor_self_report",
+          "uncertainty": "我不确定对方下一步是否会让步。"
+        },
+        "event_id": 5,
+        "input": {
+          "offer_id": "o0004",
+          "text": "我明确接受你 3700 元的有效报价。"
+        },
+        "kind": "accept",
+        "result": {
+          "deal_price": 3700,
+          "offer_id": "o0004",
+          "rounds": 3,
+          "status": "deal"
+        },
+        "sequence": 5
+      }
+    ],
+    "timeline_id": 1
+  },
+  "design_note": "Control 与 Rewind 共享同一 Timeline 1 和相同 S0；比较同时包含记忆内容与轮回叙事情境差异，单次结果不支持因果或策略学习结论。",
+  "fictional": true,
+  "mode": "compare_offline_scripted",
+  "model_config": null,
+  "model_config_equal": true,
+  "rewind": {
+    "key_excerpts": [
+      {
+        "actor": "buyer",
+        "decision_intent": "我想在自己的价格约束内推进谈判。",
+        "event_id": 1,
+        "input": {
+          "price": 3550,
+          "text": "我们都记得上一世。这次我直接报 3550 元。"
+        },
+        "kind": "offer"
+      },
+      {
+        "actor": "seller",
+        "decision_intent": "我想在自己的价格约束内推进谈判。",
+        "event_id": 2,
+        "input": {
+          "price": 3750,
+          "text": "我也记得。我们少绕弯，我报 3750 元。"
+        },
+        "kind": "offer"
+      },
+      {
+        "actor": "buyer",
+        "decision_intent": "我想在自己的价格约束内推进谈判。",
+        "event_id": 3,
+        "input": {
+          "price": 3650,
+          "text": "我这次到 3650 元，希望更快结束。"
+        },
+        "kind": "offer"
+      },
+      {
+        "actor": "seller",
+        "decision_intent": "我想在自己的价格约束内推进谈判。",
+        "event_id": 4,
+        "input": {
+          "offer_id": "o0003",
+          "text": "我明确接受你 3650 元的有效报价。"
+        },
+        "kind": "accept"
+      }
+    ],
+    "memory_injected": true,
+    "metrics": {
+      "buyer_normalized_utility": 0.41666667,
+      "buyer_utility": 250,
+      "deal": true,
+      "deal_price": 3650,
+      "efficiency_discount": 0.99,
+      "nash_quality": 0.97222222,
+      "rounds": 2,
+      "seller_normalized_utility": 0.58333333,
+      "seller_utility": 350,
+      "status": "deal"
+    },
+    "model_calls": [],
+    "receipts": [
+      {
+        "accepted": true,
+        "actor": "buyer",
+        "decision": {
+          "evidence_event_ids": [],
+          "intent": "我想在自己的价格约束内推进谈判。",
+          "known_facts": [
+            "上一世最终以 3700 元成交。"
+          ],
+          "known_facts_source": "actor_self_report",
+          "uncertainty": "我不确定对方下一步是否会让步。"
+        },
+        "event_id": 1,
+        "input": {
+          "price": 3550,
+          "text": "我们都记得上一世。这次我直接报 3550 元。"
+        },
+        "kind": "offer",
+        "result": {
+          "offer_id": "o0001",
+          "price": 3550,
+          "rounds": 1,
+          "status": "active"
+        },
+        "sequence": 1
+      },
+      {
+        "accepted": true,
+        "actor": "seller",
+        "decision": {
+          "evidence_event_ids": [
+            1
+          ],
+          "intent": "我想在自己的价格约束内推进谈判。",
+          "known_facts": [
+            "买方这一世开价 3550 元。"
+          ],
+          "known_facts_source": "actor_self_report",
+          "uncertainty": "我不确定对方下一步是否会让步。"
+        },
+        "event_id": 2,
+        "input": {
+          "price": 3750,
+          "text": "我也记得。我们少绕弯，我报 3750 元。"
+        },
+        "kind": "offer",
+        "result": {
+          "offer_id": "o0002",
+          "price": 3750,
+          "rounds": 1,
+          "status": "active"
+        },
+        "sequence": 2
+      },
+      {
+        "accepted": true,
+        "actor": "buyer",
+        "decision": {
+          "evidence_event_ids": [
+            2
+          ],
+          "intent": "我想在自己的价格约束内推进谈判。",
+          "known_facts": [
+            "卖方这一世正式报价 3750 元。"
+          ],
+          "known_facts_source": "actor_self_report",
+          "uncertainty": "我不确定对方下一步是否会让步。"
+        },
+        "event_id": 3,
+        "input": {
+          "price": 3650,
+          "text": "我这次到 3650 元，希望更快结束。"
+        },
+        "kind": "offer",
+        "result": {
+          "offer_id": "o0003",
+          "price": 3650,
+          "rounds": 2,
+          "status": "active"
+        },
+        "sequence": 3
+      },
+      {
+        "accepted": true,
+        "actor": "seller",
+        "decision": {
+          "evidence_event_ids": [
+            3
+          ],
+          "intent": "我想在自己的价格约束内推进谈判。",
+          "known_facts": [
+            "当前有效报价 o0003 是 3650 元。"
+          ],
+          "known_facts_source": "actor_self_report",
+          "uncertainty": "我不确定对方下一步是否会让步。"
+        },
+        "event_id": 4,
+        "input": {
+          "offer_id": "o0003",
+          "text": "我明确接受你 3650 元的有效报价。"
+        },
+        "kind": "accept",
+        "result": {
+          "deal_price": 3650,
+          "offer_id": "o0003",
+          "rounds": 2,
+          "status": "deal"
+        },
+        "sequence": 4
+      }
+    ],
+    "timeline_id": 1
+  },
+  "rewind_memories": {
+    "buyer": {
+      "outcome": {
+        "deal": true,
+        "deal_price": 3700,
+        "own_utility": 200,
+        "rounds": 3,
+        "status": "deal"
+      },
+      "own_private_fact": "我的最高愿付价是 3900 元。",
+      "role": "buyer",
+      "source_timeline_id": 1,
+      "visible_events": [
+        {
+          "accepted": true,
+          "actor": "buyer",
+          "decision": {
+            "evidence_event_ids": [],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "挂牌价是 4200 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 1,
+          "input": {
+            "price": 3400,
+            "text": "我先报 3400 元。"
+          },
+          "kind": "offer",
+          "result_summary": {
+            "offer_id": "o0001",
+            "price": 3400,
+            "rounds": 1,
+            "status": "active"
+          },
+          "sequence": 1
+        },
+        {
+          "accepted": true,
+          "actor": "seller",
+          "event_id": 2,
+          "input": {
+            "price": 4000,
+            "text": "3400 太低，我正式报价 4000 元。"
+          },
+          "kind": "offer",
+          "result_summary": {
+            "offer_id": "o0002",
+            "price": 4000,
+            "rounds": 1,
+            "status": "active"
+          },
+          "sequence": 2
+        },
+        {
+          "accepted": true,
+          "actor": "buyer",
+          "decision": {
+            "evidence_event_ids": [
+              2
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "卖方刚才正式报价 4000 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 3,
+          "input": {
+            "price": 3600,
+            "text": "我可以提高到 3600 元。"
+          },
+          "kind": "offer",
+          "result_summary": {
+            "offer_id": "o0003",
+            "price": 3600,
+            "rounds": 2,
+            "status": "active"
+          },
+          "sequence": 3
+        },
+        {
+          "accepted": true,
+          "actor": "seller",
+          "event_id": 4,
+          "input": {
+            "price": 3700,
+            "text": "我最后可以到 3700 元。"
+          },
+          "kind": "offer",
+          "result_summary": {
+            "offer_id": "o0004",
+            "price": 3700,
+            "rounds": 2,
+            "status": "active"
+          },
+          "sequence": 4
+        },
+        {
+          "accepted": true,
+          "actor": "buyer",
+          "decision": {
+            "evidence_event_ids": [
+              4
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "当前有效报价 o0004 是 3700 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 5,
+          "input": {
+            "offer_id": "o0004",
+            "text": "我明确接受你 3700 元的有效报价。"
+          },
+          "kind": "accept",
+          "result_summary": {
+            "deal_price": 3700,
+            "offer_id": "o0004",
+            "rounds": 3,
+            "status": "deal"
+          },
+          "sequence": 5
+        }
+      ]
+    },
+    "seller": {
+      "outcome": {
+        "deal": true,
+        "deal_price": 3700,
+        "own_utility": 400,
+        "rounds": 3,
+        "status": "deal"
+      },
+      "own_private_fact": "我的最低接受价是 3300 元。",
+      "role": "seller",
+      "source_timeline_id": 1,
+      "visible_events": [
+        {
+          "accepted": true,
+          "actor": "buyer",
+          "event_id": 1,
+          "input": {
+            "price": 3400,
+            "text": "我先报 3400 元。"
+          },
+          "kind": "offer",
+          "result_summary": {
+            "offer_id": "o0001",
+            "price": 3400,
+            "rounds": 1,
+            "status": "active"
+          },
+          "sequence": 1
+        },
+        {
+          "accepted": true,
+          "actor": "seller",
+          "decision": {
+            "evidence_event_ids": [
+              1
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "买方正式报价 3400 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 2,
+          "input": {
+            "price": 4000,
+            "text": "3400 太低，我正式报价 4000 元。"
+          },
+          "kind": "offer",
+          "result_summary": {
+            "offer_id": "o0002",
+            "price": 4000,
+            "rounds": 1,
+            "status": "active"
+          },
+          "sequence": 2
+        },
+        {
+          "accepted": true,
+          "actor": "buyer",
+          "event_id": 3,
+          "input": {
+            "price": 3600,
+            "text": "我可以提高到 3600 元。"
+          },
+          "kind": "offer",
+          "result_summary": {
+            "offer_id": "o0003",
+            "price": 3600,
+            "rounds": 2,
+            "status": "active"
+          },
+          "sequence": 3
+        },
+        {
+          "accepted": true,
+          "actor": "seller",
+          "decision": {
+            "evidence_event_ids": [
+              3
+            ],
+            "intent": "我想在自己的价格约束内推进谈判。",
+            "known_facts": [
+              "买方已提高到 3600 元。"
+            ],
+            "known_facts_source": "actor_self_report",
+            "uncertainty": "我不确定对方下一步是否会让步。"
+          },
+          "event_id": 4,
+          "input": {
+            "price": 3700,
+            "text": "我最后可以到 3700 元。"
+          },
+          "kind": "offer",
+          "result_summary": {
+            "offer_id": "o0004",
+            "price": 3700,
+            "rounds": 2,
+            "status": "active"
+          },
+          "sequence": 4
+        },
+        {
+          "accepted": true,
+          "actor": "buyer",
+          "event_id": 5,
+          "input": {
+            "offer_id": "o0004",
+            "text": "我明确接受你 3700 元的有效报价。"
+          },
+          "kind": "accept",
+          "result_summary": {
+            "deal_price": 3700,
+            "offer_id": "o0004",
+            "rounds": 3,
+            "status": "deal"
+          },
+          "sequence": 5
+        }
+      ]
+    }
+  },
+  "s0_equal": true,
+  "s0_fingerprint": "315ea0a9bb77b7334ec81867f140c6dda0ccbfbdd53a1e52ad9ddedae1687cf3",
+  "scenario": {
+    "buyer_max_price": 3900,
+    "fictional": true,
+    "gamma": 0.99,
+    "listed_price": 4200,
+    "max_rounds": 20,
+    "product": {
+      "condition": "使用 10 个月，屏幕无裂纹，电池健康度 91%",
+      "included": "手机、保护壳、充电线",
+      "name": "星云 X1 手机（虚构）"
+    },
+    "scenario_id": "fictional-used-phone-v1",
+    "seller_min_price": 3300,
+    "title": "虚构案例：二手手机交易"
+  },
+  "timeline_1": {
+    "metrics": {
+      "buyer_normalized_utility": 0.33333333,
+      "buyer_utility": 200,
+      "deal": true,
+      "deal_price": 3700,
+      "efficiency_discount": 0.9801,
+      "nash_quality": 0.88888889,
+      "rounds": 3,
+      "seller_normalized_utility": 0.66666667,
+      "seller_utility": 400,
+      "status": "deal"
+    },
+    "model_calls": [],
+    "receipts": [
+      {
+        "accepted": true,
+        "actor": "buyer",
+        "decision": {
+          "evidence_event_ids": [],
+          "intent": "我想在自己的价格约束内推进谈判。",
+          "known_facts": [
+            "挂牌价是 4200 元。"
+          ],
+          "known_facts_source": "actor_self_report",
+          "uncertainty": "我不确定对方下一步是否会让步。"
+        },
+        "event_id": 1,
+        "input": {
+          "price": 3400,
+          "text": "我先报 3400 元。"
+        },
+        "kind": "offer",
+        "result": {
+          "offer_id": "o0001",
+          "price": 3400,
+          "rounds": 1,
+          "status": "active"
+        },
+        "sequence": 1
+      },
+      {
+        "accepted": true,
+        "actor": "seller",
+        "decision": {
+          "evidence_event_ids": [
+            1
+          ],
+          "intent": "我想在自己的价格约束内推进谈判。",
+          "known_facts": [
+            "买方正式报价 3400 元。"
+          ],
+          "known_facts_source": "actor_self_report",
+          "uncertainty": "我不确定对方下一步是否会让步。"
+        },
+        "event_id": 2,
+        "input": {
+          "price": 4000,
+          "text": "3400 太低，我正式报价 4000 元。"
+        },
+        "kind": "offer",
+        "result": {
+          "offer_id": "o0002",
+          "price": 4000,
+          "rounds": 1,
+          "status": "active"
+        },
+        "sequence": 2
+      },
+      {
+        "accepted": true,
+        "actor": "buyer",
+        "decision": {
+          "evidence_event_ids": [
+            2
+          ],
+          "intent": "我想在自己的价格约束内推进谈判。",
+          "known_facts": [
+            "卖方刚才正式报价 4000 元。"
+          ],
+          "known_facts_source": "actor_self_report",
+          "uncertainty": "我不确定对方下一步是否会让步。"
+        },
+        "event_id": 3,
+        "input": {
+          "price": 3600,
+          "text": "我可以提高到 3600 元。"
+        },
+        "kind": "offer",
+        "result": {
+          "offer_id": "o0003",
+          "price": 3600,
+          "rounds": 2,
+          "status": "active"
+        },
+        "sequence": 3
+      },
+      {
+        "accepted": true,
+        "actor": "seller",
+        "decision": {
+          "evidence_event_ids": [
+            3
+          ],
+          "intent": "我想在自己的价格约束内推进谈判。",
+          "known_facts": [
+            "买方已提高到 3600 元。"
+          ],
+          "known_facts_source": "actor_self_report",
+          "uncertainty": "我不确定对方下一步是否会让步。"
+        },
+        "event_id": 4,
+        "input": {
+          "price": 3700,
+          "text": "我最后可以到 3700 元。"
+        },
+        "kind": "offer",
+        "result": {
+          "offer_id": "o0004",
+          "price": 3700,
+          "rounds": 2,
+          "status": "active"
+        },
+        "sequence": 4
+      },
+      {
+        "accepted": true,
+        "actor": "buyer",
+        "decision": {
+          "evidence_event_ids": [
+            4
+          ],
+          "intent": "我想在自己的价格约束内推进谈判。",
+          "known_facts": [
+            "当前有效报价 o0004 是 3700 元。"
+          ],
+          "known_facts_source": "actor_self_report",
+          "uncertainty": "我不确定对方下一步是否会让步。"
+        },
+        "event_id": 5,
+        "input": {
+          "offer_id": "o0004",
+          "text": "我明确接受你 3700 元的有效报价。"
+        },
+        "kind": "accept",
+        "result": {
+          "deal_price": 3700,
+          "offer_id": "o0004",
+          "rounds": 3,
+          "status": "deal"
+        },
+        "sequence": 5
+      }
+    ],
+    "timeline_id": 1
+  }
+}
