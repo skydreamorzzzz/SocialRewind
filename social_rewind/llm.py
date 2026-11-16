@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import http.client
 import json
 import urllib.error
 import urllib.request
@@ -68,8 +69,10 @@ class OpenAICompatibleClient:
             detail = exc.read().decode("utf-8", errors="replace")[:500]
             failed_record["error"] = {"http_status": exc.code, "detail": detail}
             raise ModelCallError(f"模型 API HTTP {exc.code}: {detail}", [failed_record]) from exc
-        except (urllib.error.URLError, TimeoutError) as exc:
+        except (urllib.error.URLError, TimeoutError, http.client.HTTPException, ConnectionError) as exc:
             failed_record["error"] = {"type": type(exc).__name__, "message": str(exc)}
+            if isinstance(exc, http.client.IncompleteRead):
+                failed_record["error"]["partial_response"] = exc.partial.decode("utf-8", errors="replace")
             raise ModelCallError(f"模型 API 调用失败: {exc}", [failed_record]) from exc
         try:
             payload = json.loads(raw_response)

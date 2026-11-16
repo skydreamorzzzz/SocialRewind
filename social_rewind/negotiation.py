@@ -242,6 +242,11 @@ class LLMNegotiationAgent:
             # 消融组共享完全相同的叙事；只替换独立记忆数据，不改谈判目标与规则。
             rebirth = context["shared_reset_frame"] + "\n【本人授权记忆数据】\n" + json.dumps(
                 memory.to_dict() if memory is not None else None, ensure_ascii=False, sort_keys=True)
+        if "strategy_reference" in context:
+            rebirth = ("【v3 路径重启】世界恢复同一初始条件。以下仅为你自己的授权路径历史、个人总结与私人策略计划。"
+                       "对方有自己的路径记忆与计划，但你不能读取其私人内容。计划只是参考，允许偏离、重复或放弃；"
+                       "不能把旧事件编号当成本世证据。\n【本人策略参考】\n"
+                       + json.dumps(context["strategy_reference"], ensure_ascii=False, sort_keys=True))
         schema = """每次只输出一个 JSON 对象，禁止 Markdown：
 {
   "decision": {
@@ -426,11 +431,14 @@ class NegotiationRunner:
         memories: dict[str, TradeMemory] | None = None,
         session_context: str | None = None,
         shared_reset_frame: str | None = None,
+        private_contexts: dict[str, dict[str, Any]] | None = None,
         on_turn: Callable[[str, AgentTurn, dict[str, Any]], None] | None = None,
     ) -> NegotiationRun:
         memory_map = memories or {}
         if set(memory_map) - set(ROLES):
             raise ValueError("记忆映射包含未知角色")
+        if private_contexts is not None and set(private_contexts) != set(ROLES):
+            raise ValueError("私人策略上下文必须分别属于双方")
         agents: dict[str, NegotiationAgent] = {"buyer": buyer, "seller": seller}
         for role, agent in agents.items():
             memory = memory_map.get(role)
@@ -441,6 +449,8 @@ class NegotiationRunner:
                 context["experiment_context"] = session_context
             if shared_reset_frame is not None:
                 context["shared_reset_frame"] = shared_reset_frame
+            if private_contexts is not None:
+                context["strategy_reference"] = copy.deepcopy(private_contexts[role])
             agent.start(role, context, memory)
 
         calls: list[dict[str, Any]] = []

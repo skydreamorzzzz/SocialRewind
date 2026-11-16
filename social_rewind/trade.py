@@ -42,7 +42,17 @@ class DiscretePreferences:
     minimum_utility: int = 0
 
 
-def _terms_adjustment(pref: ContractPreferences | DiscretePreferences, role: str, d: int, w: int) -> int:
+@dataclass(frozen=True)
+class InteractionPreferences:
+    value: int
+    adjustment: dict[str, dict[str, int]]
+    role_card: tuple[str, ...]
+    minimum_utility: int = 0
+
+
+def _terms_adjustment(pref: ContractPreferences | DiscretePreferences | InteractionPreferences, role: str, d: int, w: int) -> int:
+    if isinstance(pref, InteractionPreferences):
+        return pref.adjustment[str(d)][str(w)]
     if isinstance(pref, DiscretePreferences):
         return pref.delivery_utilities[str(d)] + pref.warranty_utilities[str(w)]
     adjustment = -pref.delay * (d - 1) + pref.warranty * w
@@ -51,8 +61,8 @@ def _terms_adjustment(pref: ContractPreferences | DiscretePreferences, role: str
 
 @dataclass(frozen=True)
 class ContractConfig:
-    buyer: ContractPreferences | DiscretePreferences
-    seller: ContractPreferences | DiscretePreferences
+    buyer: ContractPreferences | DiscretePreferences | InteractionPreferences
+    seller: ContractPreferences | DiscretePreferences | InteractionPreferences
     price_min: int = 3000
     price_max: int = 4500
     price_step: int = 50
@@ -158,7 +168,10 @@ def scenario_from_dict(value: dict[str, Any]) -> TradeScenario:
         contract = data["contract"]
         for role in ROLES:
             pref = contract[role]
-            if "delivery_utilities" in pref:
+            if "adjustment" in pref:
+                pref["role_card"] = tuple(pref["role_card"])
+                contract[role] = InteractionPreferences(**pref)
+            elif "delivery_utilities" in pref:
                 pref["role_card"] = tuple(pref["role_card"])
                 contract[role] = DiscretePreferences(**pref)
             else:
@@ -248,8 +261,14 @@ class TradeWorld:
                     or len(set(c.warranty_days)) != len(c.warranty_days)):
                 raise ValueError("交付/保障选项必须非空、不重复，交付至少一天")
             for pref in (c.buyer, c.seller):
-                if isinstance(pref, DiscretePreferences):
-                    for table, options in ((pref.delivery_utilities, c.delivery_days), (pref.warranty_utilities, c.warranty_days)):
+                if isinstance(pref, (DiscretePreferences, InteractionPreferences)):
+                    if isinstance(pref, InteractionPreferences):
+                        if set(pref.adjustment) != {str(d) for d in c.delivery_days}:
+                            raise ValueError("交互效用表必须覆盖全部交付选项")
+                        tables = [(row, c.warranty_days) for row in pref.adjustment.values()]
+                    else:
+                        tables = [(pref.delivery_utilities, c.delivery_days), (pref.warranty_utilities, c.warranty_days)]
+                    for table, options in tables:
                         if set(table) != {str(n) for n in options} or any(type(v) is not int for v in table.values()):
                             raise ValueError("离散效用表必须完整覆盖公开选项，效用必须为整数")
                     if type(pref.minimum_utility) is not int or pref.minimum_utility < 0:
@@ -364,6 +383,9 @@ class TradeWorld:
                 own_value["utility_formula"] = ("value-price+delivery_utilities[delivery_days]+warranty_utilities[warranty_days]"
                                                 if viewer == "buyer" else
                                                 "price-value+delivery_utilities[delivery_days]+warranty_utilities[warranty_days]")
+            elif isinstance(pref, InteractionPreferences):
+                own_value["utility_formula"] = ("value-price+adjustment[delivery_days][warranty_days]" if viewer == "buyer"
+                                                else "price-value+adjustment[delivery_days][warranty_days]")
             limits = []
             for d in c.delivery_days:
                 for w in c.warranty_days:
@@ -687,7 +709,7 @@ class TradeWorld:
         pref = getattr(self._scenario.contract, role)
         minimum = getattr(pref, "minimum_utility", 0)
         if self._utility(role, **{k: terms[k] for k in ("price", "delivery_days", "warranty_days")}) < minimum:
-            message = ("正式报价和接受不得使自身收益低于私人最低可接受效用" if isinstance(pref, DiscretePreferences)
+            message = ("正式报价和接受不得使自身收益低于私人最低可接受效用" if isinstance(pref, (DiscretePreferences, InteractionPreferences))
                        else "正式报价和接受不得使自身收益低于退出收益 0")
             raise _Refusal("negative_own_utility", message)
 
