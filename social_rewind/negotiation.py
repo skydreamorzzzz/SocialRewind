@@ -107,6 +107,7 @@ def render_rebirth_prompt(memory: TradeMemory, counterpart_role: str) -> str:
 
 上一世结果：{json.dumps(memory.outcome, ensure_ascii=False, sort_keys=True)}
 你自己的私人事实：{memory.own_private_fact}
+你自己生成的上一世经验总结（未经事实核查，判断可能错误）：{json.dumps(memory.personal_summary, ensure_ascii=False)}
 {previous}
 
 这一世，我重生了。你可以延续旧决定、吸取教训、试探对方或采用不同策略；不要求必须改变，也不要求必须成交。不要把猜测说成已验证事实。历史编号不能当作当前时间线的 evidence_event_ids。
@@ -116,7 +117,7 @@ def render_rebirth_prompt(memory: TradeMemory, counterpart_role: str) -> str:
 def render_control_prompt() -> str:
     return """【重置后的对照谈判】
 
-世界已经恢复到与第一场谈判完全相同的初始状态。你知道实验发生过一次重置，对方也知道这一点。
+世界已经恢复到与第一场谈判完全相同的初始状态。你知道世界发生过重置，对方也知道这一点。
 但是，你和对方都没有保留任何可用的前世经历：没有上一场的消息、报价、结果、决策说明或经验总结。
 因此你不能引用或猜称上一场具体发生过什么。请只根据当前商品、规则、自己的私人偏好和本场实际观察自主谈判。
 """
@@ -138,6 +139,70 @@ class ScriptedAgent:
         if not self._turns:
             raise AgentOutputError("脚本 Agent 没有剩余行动", [])
         return AgentReply(turn=self._turns.pop(0))
+
+
+def summarize_experience(client: OpenAICompatibleClient | None, memory: TradeMemory) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """只给角色本人的授权证据；总结在世界之外，不校正其主观判断。"""
+    metadata = {"role": memory.role, "source_timeline_id": memory.source_timeline_id,
+                "source": "agent_self_report" if client is not None else "offline_fixture"}
+    if client is None:
+        return {**metadata, "observations": [f"离线脚本本世可见 {len(memory.visible_events)} 条事件。"],
+                "beliefs": "离线机制测试不推断对方偏好。", "next_strategy": "继续使用机制测试脚本，不作为策略改进证据。",
+                "evidence_event_ids": []}, []
+    messages = [{"role": "system", "content": (
+        f"你刚作为 {memory.role} 结束一世手机谈判。根据下方本人授权历史，生成简短个人经验总结。"
+        "只输出 JSON，严格包含 observations（1至3条短句数组：我观察到了什么）、"
+        "beliefs（短字符串：我对对方需求的新判断及不确定性）、"
+        "next_strategy（短字符串：我下一世可能尝试什么，也可维持旧策略）、"
+        "evidence_event_ids（本世可见事件编号数组，可为空）。每段不超过300字。"
+        "区分观察与猜测，不冒称知道对方未公开的私人信息；判断可以错误，不要求总结出更好策略。"
+        "这是显式研究记录，不需要隐藏推理链。不要输出世界行动或改写结果。")},
+        {"role": "user", "content": json.dumps(memory.to_dict(), ensure_ascii=False, sort_keys=True)}]
+    calls = []
+    for attempt in range(2):
+        try:
+            raw, record = client.complete(messages)
+        except ModelCallError as exc:
+            exc.call_records = calls + exc.call_records
+            for call in exc.call_records:
+                call.update(role=memory.role, purpose="reflection", timeline_id=memory.source_timeline_id)
+            raise
+        record.update(role=memory.role, purpose="reflection", timeline_id=memory.source_timeline_id, format_attempt=attempt)
+        calls.append(record)
+        try:
+            value = json.loads(raw)
+            if not isinstance(value, dict) or set(value) != {"observations", "beliefs", "next_strategy", "evidence_event_ids"}:
+                raise ValueError("JSON 仅允许 observations/beliefs/next_strategy/evidence_event_ids")
+            validate_summary({**metadata, **value}, memory)
+        except (TypeError, ValueError, KeyError) as exc:
+            record["validation_error"] = str(exc)
+            if attempt == 1:
+                raise AgentOutputError(f"个人经验总结无效: {exc}", calls) from exc
+            messages += [{"role": "assistant", "content": raw},
+                         {"role": "user", "content": f"只修复 JSON 格式与引用，保持你的判断：{exc}"}]
+            continue
+        return {**metadata, **value}, calls
+    raise AssertionError("unreachable")
+
+
+def validate_summary(summary: dict[str, Any], memory: TradeMemory) -> None:
+    if set(summary) != {"role", "source_timeline_id", "source", "observations", "beliefs", "next_strategy", "evidence_event_ids"}:
+        raise ValueError("个人总结字段不符合契约")
+    if summary["role"] != memory.role or summary["source_timeline_id"] != memory.source_timeline_id:
+        raise PermissionError("个人总结所有者或来源时间线错误")
+    observations = summary["observations"]
+    if not isinstance(observations, list) or not 1 <= len(observations) <= 3:
+        raise ValueError("observations 应为1至3条短句")
+    if any(not isinstance(s, str) or not s.strip() or len(s) > 300
+           for s in [*observations, summary["beliefs"], summary["next_strategy"]]):
+        raise ValueError("总结各段必须是1至300字字符串")
+    ids = summary["evidence_event_ids"]
+    visible_ids = {e["event_id"] for e in memory.visible_events}
+    if (not isinstance(ids, list) or any(type(i) is not int or i not in visible_ids for i in ids)
+            or len(set(ids)) != len(ids)):
+        raise ValueError("总结只能引用本角色本世可见的事件编号")
+    if summary["source"] not in ("agent_self_report", "offline_fixture"):
+        raise ValueError("个人总结只能标记为角色自述或离线测试")
 
 
 class LLMNegotiationAgent:
@@ -192,6 +257,11 @@ class LLMNegotiationAgent:
             private_rule += ("\n交付时间指协议达成后天数；保障指售后保障天数。你可以自由询问、沟通、交换条件、"
                              "用新的完整 offer 修改方案、接受、拒绝或退出。双方轮流发言，最多两次行动算一轮；"
                              "消息也占一次行动。新报价取代旧报价。不要求按固定步骤或必须成交。")
+            private_rule += ("\n私人效用下限只是合法性的底线，不是你的理想目标。接受前请自主权衡："
+                             "当前方案离你的理想目标有多远、继续沟通或交换合同条件可能带来什么收益，"
+                             "以及对方拒绝、退出或超时使你得到0收益的风险。正收益本身不等于应该立即接受。"
+                             "你可以主动询问、解释，选择披露或保留私人需求；也可以立即成交。"
+                             "没有最低谈判轮数，没有必须遵循的谈判流程，不要求一定改变策略或达成协议。")
         system = f"""你是虚构二手交易中的 {role}，对方是 {counterpart}。请自主、诚实地进行合同谈判，可试探、拒绝、退出或成交，但不要暴露隐藏推理链。
 
 公开商品：{json.dumps(context['product'], ensure_ascii=False, sort_keys=True)}

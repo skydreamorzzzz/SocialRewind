@@ -34,9 +34,25 @@ class ContractPreferences:
 
 
 @dataclass(frozen=True)
+class DiscretePreferences:
+    value: int
+    delivery_utilities: dict[str, int]
+    warranty_utilities: dict[str, int]
+    role_card: tuple[str, ...]
+    minimum_utility: int = 0
+
+
+def _terms_adjustment(pref: ContractPreferences | DiscretePreferences, role: str, d: int, w: int) -> int:
+    if isinstance(pref, DiscretePreferences):
+        return pref.delivery_utilities[str(d)] + pref.warranty_utilities[str(w)]
+    adjustment = -pref.delay * (d - 1) + pref.warranty * w
+    return adjustment if role == "buyer" else -adjustment
+
+
+@dataclass(frozen=True)
 class ContractConfig:
-    buyer: ContractPreferences
-    seller: ContractPreferences
+    buyer: ContractPreferences | DiscretePreferences
+    seller: ContractPreferences | DiscretePreferences
     price_min: int = 3000
     price_max: int = 4500
     price_step: int = 50
@@ -68,6 +84,7 @@ class TradeMemory:
     outcome: dict[str, Any]
     own_private_fact: str
     previous_lives: tuple[dict[str, Any], ...] = ()
+    personal_summary: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
@@ -93,7 +110,7 @@ def fictional_phone_trade(max_rounds: int = 20) -> TradeScenario:
 
 
 def multidimensional_trade(profile: str = "urgent", max_rounds: int = 20) -> TradeScenario:
-    """自行构造的两组私人偏好；不是 AgenticPay 原始数据。"""
+    """历史 v2 线性配置，仅用于兼容既有测试和审计记录。"""
     profiles = {
         "urgent": (ContractPreferences(3900, 70, 3), ContractPreferences(3300, 20, 1)),
         "warranty": (ContractPreferences(3700, 5, 6), ContractPreferences(3300, 20, 2)),
@@ -109,12 +126,43 @@ def multidimensional_trade(profile: str = "urgent", max_rounds: int = 20) -> Tra
     )
 
 
+def phone_negotiation(max_rounds: int = 20) -> TradeScenario:
+    """同一虚构手机案例的离散效用与角色卡，不导入真实成交数据。"""
+    buyer = DiscretePreferences(4100, {"1": 120, "3": 0, "7": -250},
+                                {"0": 0, "30": 140, "90": 170}, (
+        "我希望以合理价格买到可靠的手机，担心隐藏故障。",
+        "我偏好尽快交付，但可以为了更好的价格等待。",
+        "我希望有适当售后保障，90 天相比 30 天的额外价值有限。",
+        "我的理想目标是较低成交价、较快交付、至少 30 天保障。",
+        "我不知道卖方的最低接受条件和履约成本。",
+    ))
+    seller = DiscretePreferences(3300, {"1": -220, "3": 0, "7": 20},
+                                 {"0": 0, "30": -50, "90": -170}, (
+        "我希望尽可能提高成交收益，也希望尽快完成交易。",
+        "我需要迁移个人数据，1 天交付有额外加急成本，3 天更合适。",
+        "我可以提供售后保障，但期限越长，潜在成本越高。",
+        "我的理想目标是较高成交价、3 天交付、控制售后责任。",
+        "我不知道买方的预算、时间偏好与保障估值。",
+    ))
+    return TradeScenario(
+        scenario_id="fictional-phone-v2-discrete", title="星云 X1：交付与保障的条件交换",
+        fictional=True, product=fictional_phone_trade().product, listed_price=4200,
+        buyer_max_price=buyer.value, seller_min_price=seller.value, max_rounds=max_rounds,
+        contract=ContractConfig(buyer, seller),
+    )
+
+
 def scenario_from_dict(value: dict[str, Any]) -> TradeScenario:
     data = copy.deepcopy(value)
     if data.get("contract") is not None:
         contract = data["contract"]
-        contract["buyer"] = ContractPreferences(**contract["buyer"])
-        contract["seller"] = ContractPreferences(**contract["seller"])
+        for role in ROLES:
+            pref = contract[role]
+            if "delivery_utilities" in pref:
+                pref["role_card"] = tuple(pref["role_card"])
+                contract[role] = DiscretePreferences(**pref)
+            else:
+                contract[role] = ContractPreferences(**pref)
         contract["delivery_days"] = tuple(contract["delivery_days"])
         contract["warranty_days"] = tuple(contract["warranty_days"])
         data["contract"] = ContractConfig(**contract)
@@ -160,7 +208,7 @@ class TradeWorld:
                 for d in c.delivery_days:
                     for w in c.warranty_days:
                         pair = (self._utility("buyer", p, d, w), self._utility("seller", p, d, w))
-                        if min(pair) >= 0:
+                        if all(u >= getattr(getattr(c, r), "minimum_utility", 0) for r, u in zip(ROLES, pair)):
                             self._feasible_utilities.append(pair)
         self._events: list[dict[str, Any]] = []
         self._timeline_id = 1
@@ -188,8 +236,7 @@ class TradeWorld:
         c = scenario.contract
         if c is not None:
             numbers = (c.price_min, c.price_max, c.price_step, *c.delivery_days, *c.warranty_days,
-                       c.buyer.value, c.buyer.delay, c.buyer.warranty,
-                       c.seller.value, c.seller.delay, c.seller.warranty)
+                       c.buyer.value, c.seller.value)
             if any(type(n) is not int or n < 0 for n in numbers):
                 raise ValueError("合同范围与偏好必须是非负整数")
             if not 0 < c.price_min <= c.price_max or c.price_step <= 0:
@@ -200,15 +247,25 @@ class TradeWorld:
                     or len(set(c.delivery_days)) != len(c.delivery_days)
                     or len(set(c.warranty_days)) != len(c.warranty_days)):
                 raise ValueError("交付/保障选项必须非空、不重复，交付至少一天")
+            for pref in (c.buyer, c.seller):
+                if isinstance(pref, DiscretePreferences):
+                    for table, options in ((pref.delivery_utilities, c.delivery_days), (pref.warranty_utilities, c.warranty_days)):
+                        if set(table) != {str(n) for n in options} or any(type(v) is not int for v in table.values()):
+                            raise ValueError("离散效用表必须完整覆盖公开选项，效用必须为整数")
+                    if type(pref.minimum_utility) is not int or pref.minimum_utility < 0:
+                        raise ValueError("最低可接受效用必须为非负整数")
+                    if not pref.role_card or any(not isinstance(s, str) or not s.strip() for s in pref.role_card):
+                        raise ValueError("私人角色卡不能为空")
+                elif any(type(n) is not int or n < 0 for n in (pref.delay, pref.warranty)):
+                    raise ValueError("历史线性偏好系数必须为非负整数")
             count = (1 + (c.price_max - c.price_min) // c.price_step) * len(c.delivery_days) * len(c.warranty_days)
             if count > 10000:
                 raise ValueError("MVP 合同空间最多 10000 个组合")
             if not c.price_min <= scenario.listed_price <= c.price_max or (scenario.listed_price - c.price_min) % c.price_step:
                 raise ValueError("挂牌价必须在合同价格网格内")
-            listing_utility = (scenario.listed_price - c.seller.value
-                               + c.seller.delay * (c.delivery_days[0] - 1)
-                               - c.seller.warranty * c.warranty_days[0])
-            if listing_utility < 0:
+            listing_utility = scenario.listed_price - c.seller.value + _terms_adjustment(
+                c.seller, "seller", c.delivery_days[0], c.warranty_days[0])
+            if listing_utility < getattr(c.seller, "minimum_utility", 0):
                 raise ValueError("挂牌合同必须满足卖方非负效用")
 
     @staticmethod
@@ -244,8 +301,8 @@ class TradeWorld:
         if role not in ROLES or self._scenario.contract is None:
             raise ValueError("utility 仅用于三维合同的 buyer/seller")
         pref = getattr(self._scenario.contract, role)
-        value = pref.value - price - pref.delay * (delivery_days - 1) + pref.warranty * warranty_days
-        return value if role == "buyer" else -value
+        base = pref.value - price if role == "buyer" else price - pref.value
+        return base + _terms_adjustment(pref, role, delivery_days, warranty_days)
 
     def contract_rules(self) -> dict[str, Any] | None:
         c = self._scenario.contract
@@ -291,10 +348,16 @@ class TradeWorld:
             # 仅展开角色已知的自身效用，不推荐策略，不使用对手偏好。
             c = self._scenario.contract
             pref = getattr(c, viewer)
+            if isinstance(pref, DiscretePreferences):
+                own_value["utility_formula"] = ("value-price+delivery_utilities[delivery_days]+warranty_utilities[warranty_days]"
+                                                if viewer == "buyer" else
+                                                "price-value+delivery_utilities[delivery_days]+warranty_utilities[warranty_days]")
             limits = []
             for d in c.delivery_days:
                 for w in c.warranty_days:
-                    bound = pref.value - pref.delay * (d - 1) + pref.warranty * w
+                    adjustment = _terms_adjustment(pref, viewer, d, w)
+                    minimum = getattr(pref, "minimum_utility", 0)
+                    bound = pref.value + adjustment - minimum if viewer == "buyer" else pref.value - adjustment + minimum
                     if viewer == "buyer":
                         price_limit = min(c.price_max, c.price_min + (bound - c.price_min) // c.price_step * c.price_step)
                         available = price_limit >= c.price_min
@@ -609,8 +672,12 @@ class TradeWorld:
             raise _Refusal("invalid_contract", "条款必须符合公开合同网格")
 
     def _validate_own_utility(self, role: str, terms: dict[str, Any]) -> None:
-        if self._utility(role, **{k: terms[k] for k in ("price", "delivery_days", "warranty_days")}) < 0:
-            raise _Refusal("negative_own_utility", "正式报价和接受不得使自身收益低于退出收益 0")
+        pref = getattr(self._scenario.contract, role)
+        minimum = getattr(pref, "minimum_utility", 0)
+        if self._utility(role, **{k: terms[k] for k in ("price", "delivery_days", "warranty_days")}) < minimum:
+            message = ("正式报价和接受不得使自身收益低于私人最低可接受效用" if isinstance(pref, DiscretePreferences)
+                       else "正式报价和接受不得使自身收益低于退出收益 0")
+            raise _Refusal("negative_own_utility", message)
 
     @staticmethod
     def _require_text(value: object) -> str:
@@ -819,7 +886,7 @@ class TradeWorld:
             if self._scenario.contract is not None:
                 terms = state["deal_terms"]
                 self._validate_terms(terms)
-                if terms["price"] != price or any(self._utility(r, **terms) < 0 for r in ROLES):
+                if terms["price"] != price or any(self._utility(r, **terms) < getattr(getattr(self._scenario.contract, r), "minimum_utility", 0) for r in ROLES):
                     raise AssertionError("合同必须与成交价一致，且满足双方个体理性")
             elif not self._scenario.seller_min_price <= price <= self._scenario.buyer_max_price:
                 raise AssertionError("成交价格违反双方硬约束")

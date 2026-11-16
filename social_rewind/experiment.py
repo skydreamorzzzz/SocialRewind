@@ -15,9 +15,9 @@ from typing import Any
 from .llm import ModelCallError, OpenAICompatibleClient, OpenAICompatibleConfig
 from .negotiation import (
     AgentOutputError, AgentTurn, IllegalAgentAction, LLMNegotiationAgent,
-    NegotiationRunner, ScriptedAgent, render_control_prompt,
+    NegotiationRunner, ScriptedAgent, render_control_prompt, summarize_experience, validate_summary,
 )
-from .trade import AUDITOR, ROLES, TradeMemory, TradeScenario, TradeWorld, multidimensional_trade, scenario_from_dict
+from .trade import AUDITOR, ROLES, DiscretePreferences, TradeMemory, TradeScenario, TradeWorld, phone_negotiation, scenario_from_dict
 
 
 def _scripted_agents(scenario: TradeScenario) -> tuple[ScriptedAgent, ScriptedAgent]:
@@ -27,7 +27,7 @@ def _scripted_agents(scenario: TradeScenario) -> tuple[ScriptedAgent, ScriptedAg
     feasible = [
         (p, d, w) for p in range(c.price_min, c.price_max + 1, c.price_step)
         for d in c.delivery_days for w in c.warranty_days
-        if min(world._utility(r, p, d, w) for r in ROLES) >= 0
+        if all(world._utility(r, p, d, w) >= getattr(getattr(c, r), "minimum_utility", 0) for r in ROLES)
     ]
 
     def turn(kind: str, speech: str, **kwargs: Any) -> AgentTurn:
@@ -93,6 +93,10 @@ def verify_results(output: dict[str, Any]) -> None:
             replayed = TradeWorld.replay(scenario, experiment["worlds"][run["group"]]["events"][:run["audit_end"]])
             if run["status"] == "completed" and replayed.metrics(AUDITOR) != run["metrics"]:
                 raise AssertionError("时间线指标与回放不一致")
+            if run.get("summaries_enabled") and run["status"] == "completed" and set(run["reflections"]) != set(ROLES):
+                raise AssertionError("本世必须保留双方个人总结")
+            for role, summary in run.get("reflections", {}).items():
+                validate_summary(summary, replayed.capture_memory(role))
             if run["group"] != "rewind":
                 if run["memories"] or run["memory_injected"]:
                     raise AssertionError("Control 或第一世不应注入记忆")
@@ -111,6 +115,12 @@ def verify_results(output: dict[str, Any]) -> None:
                     snapshot = earlier[source_life - 1] if source_life < run["life"] - 1 else saved
                     expected = source.capture_memory(role).to_dict()
                     expected.pop("previous_lives")
+                    source_group = "baseline" if source_life == 1 else "rewind"
+                    source_run = next(r for r in experiment["runs"] if r["group"] == source_group and r["life"] == source_life)
+                    expected["personal_summary"] = source_run.get("reflections", {}).get(role)
+                    if "personal_summary" not in snapshot and not source_run.get("summaries_enabled"):
+                        # 仅历史 v2 日志允许缺少总结；新版不能通过删字段绕过继承检查。
+                        expected.pop("personal_summary")
                     if snapshot != expected:
                         raise AssertionError("记忆包含未授权内容或与实际历史不一致")
 
@@ -127,10 +137,10 @@ def run_experiments(
     if not scenarios or any(s.contract is None for s in scenarios):
         raise ValueError("v2 需要至少一组三维合同场景")
     output: dict[str, Any] = {
-        "schema_version": 2, "created_utc": datetime.now(timezone.utc).isoformat(),
+        "schema_version": 3, "created_utc": datetime.now(timezone.utc).isoformat(),
         "mode": "live_llm" if live else "offline_scripted", "status": "running",
         "config": {"lives": lives, "repeats": repeats,
-                   "design": "同一第一世；Control 每世无历史，Rewind 累积自身可见历史；每世新会话；重复间不共享经验",
+                   "design": "同一第一世；Control 每世无历史或总结，Rewind 累积本人授权历史与个人总结；每世新会话；重复间不共享经验",
                    "statistics": "按场景/组/世汇总；未成交收益为0；Pareto效率基于完整有限合同网格和退出点；不跨偏好混合",
                    "limitation": "记忆可用性与轮回叙事情境同时改变；样本不保证显著性或因果改善"},
         "experiments": [], "summary": [],
@@ -158,13 +168,27 @@ def run_experiments(
                     "group": group, "life": life, "status": "running", "initial_state": copy.deepcopy(s0),
                     "memory_injected": bool(memories), "memories": {r: m.to_dict() for r, m in (memories or {}).items()},
                     "session_context": context, "model_calls": [], "receipts": [],
+                    "summaries_enabled": isinstance(scenario.contract.buyer, DiscretePreferences), "reflections": {},
                 }
                 experiment["runs"].append(record)
                 try:
                     run = runner.run(world, *agents, memories=memories, session_context=context)
                     record.update(status="completed", timeline_id=run.timeline_id, metrics=run.metrics,
                                   model_calls=list(run.model_calls), receipts=list(run.receipts))
-                    for call in run.model_calls:
+                    if record["summaries_enabled"]:
+                        for role in ROLES:
+                            try:
+                                summary, calls = summarize_experience(client if live else None, world.capture_memory(role))
+                            except (AgentOutputError, ModelCallError) as exc:
+                                exc.call_records = record["model_calls"] + exc.call_records
+                                exc.receipts = record["receipts"]
+                                record["error_phase"] = "reflection"
+                                raise
+                            record["reflections"][role] = summary
+                            record["model_calls"].extend(calls)
+                    for sequence, call in enumerate(record["model_calls"], start=1):
+                        call["call_sequence"] = sequence
+                        call.setdefault("purpose", "negotiation")
                         cfg = {k: v for k, v in call["request"].items() if k != "messages"}
                         if model_config is not None and model_config != cfg:
                             raise AssertionError("同一实验的模型采样配置发生变化")
@@ -177,6 +201,9 @@ def run_experiments(
                 except (AgentOutputError, IllegalAgentAction, ModelCallError) as exc:
                     record.update(status="failed", error={"type": type(exc).__name__, "message": str(exc)},
                                   model_calls=exc.call_records, receipts=getattr(exc, "receipts", []))
+                    for sequence, call in enumerate(record["model_calls"], start=1):
+                        call["call_sequence"] = sequence
+                        call.setdefault("purpose", "negotiation")
                     output["status"] = "failed"
                     raise
                 finally:
@@ -199,7 +226,9 @@ def run_experiments(
                 for life in range(2, lives + 1):
                     memories = None
                     if group == "rewind":
-                        current = {r: world.capture_memory(r) for r in ROLES}
+                        source_group = "baseline" if life == 2 else "rewind"
+                        source_run = next(r for r in experiment["runs"] if r["group"] == source_group and r["life"] == life - 1)
+                        current = {r: replace(world.capture_memory(r), personal_summary=source_run["reflections"].get(r)) for r in ROLES}
                         memories = {r: replace(m, previous_lives=tuple(copy.deepcopy(history[r]))) for r, m in current.items()}
                         for role, memory in current.items():
                             snapshot = memory.to_dict()
@@ -227,8 +256,6 @@ def main() -> None:
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--lives", type=int, default=3, help="总世数；1表示单次谈判")
     parser.add_argument("--repeats", type=int, default=1)
-    parser.add_argument("--profiles", nargs="+", choices=("urgent", "warranty"), default=["urgent"])
-    parser.add_argument("--scenario", type=Path, help="替代内置配置；格式为结果日志中的完整 scenario 对象")
     parser.add_argument("--max-rounds", type=int, default=20)
     parser.add_argument("--api-base", default=os.getenv("SOCIALREWIND_API_BASE"))
     parser.add_argument("--model", default=os.getenv("SOCIALREWIND_MODEL"))
@@ -250,8 +277,7 @@ def main() -> None:
         write_timeline_page(output, args.html)
         print(f"精确回放通过；页面：{args.html.resolve()}")
         return
-    scenarios = ([scenario_from_dict(json.loads(args.scenario.read_text(encoding="utf-8")))] if args.scenario
-                 else [multidimensional_trade(p, args.max_rounds) for p in args.profiles])
+    scenarios = [phone_negotiation(args.max_rounds)]
     client = None
     if args.live:
         key = os.getenv(args.api_key_env)
