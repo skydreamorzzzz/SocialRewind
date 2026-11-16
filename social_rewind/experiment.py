@@ -7,6 +7,8 @@ import json
 import os
 import statistics
 import sys
+import hashlib
+from itertools import permutations
 from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +20,7 @@ from .negotiation import (
     NegotiationRunner, ScriptedAgent, render_control_prompt, summarize_experience, validate_summary,
 )
 from .trade import AUDITOR, ROLES, DiscretePreferences, TradeMemory, TradeScenario, TradeWorld, phone_negotiation, scenario_from_dict
+from .evaluation import GROUPS, RESET_FRAME, ablation_statistics, estimate_reservation, validate_estimate
 
 
 def _scripted_agents(scenario: TradeScenario) -> tuple[ScriptedAgent, ScriptedAgent]:
@@ -75,6 +78,9 @@ def save_results(output: dict[str, Any], log_path: Path, html_path: Path | None)
 
 def verify_results(output: dict[str, Any]) -> None:
     """从磁盘加载的结果也可验证；不访问 API。"""
+    if output.get("design") == "memory_ablation":
+        verify_ablation_results(output)
+        return
     for experiment in output["experiments"]:
         scenario = scenario_from_dict(experiment["scenario"])
         initial = TradeWorld(scenario)
@@ -249,11 +255,210 @@ def run_experiments(
     return output
 
 
+def verify_ablation_results(output: dict[str, Any]) -> None:
+    for experiment in output["experiments"]:
+        scenario = scenario_from_dict(experiment["scenario"])
+        initial = TradeWorld(scenario)
+        if scenario != phone_negotiation() or initial.s0_fingerprint != experiment["s0_fingerprint"]:
+            raise AssertionError("冻结案例或 S0 被改变")
+        base_events = experiment["worlds"]["baseline"]["events"]
+        base_world = TradeWorld.replay(scenario, base_events)
+        baseline = experiment["runs"][0]
+        for run in experiment["runs"]:
+            if run["initial_state"] != initial.audit_state(AUDITOR):
+                raise AssertionError("分支初始状态不一致")
+            branch = experiment["worlds"][run["group"]]
+            world = TradeWorld.replay(scenario, branch["events"])
+            if world.audit_state(AUDITOR) != branch["final_state"] or ("metrics" in run and world.metrics(AUDITOR) != run["metrics"]):
+                raise AssertionError("世界或指标回放不一致")
+            if branch["events"][:len(base_events)] != base_events:
+                raise AssertionError("分支不是来自同一第一世")
+            expected_memories = {}
+            if run["group"] in ("rewind_h", "rewind_hr"):
+                for role in ROLES:
+                    memory = base_world.capture_memory(role)
+                    if run["group"] == "rewind_hr":
+                        memory = replace(memory, personal_summary=baseline["reflections"][role])
+                    expected_memories[role] = memory.to_dict()
+            if run["memories"] != expected_memories or run["memory_injected"] != bool(expected_memories):
+                raise AssertionError("消融记忆包含未授权历史、Reflection 或事后评测")
+            if run["group"] != "baseline" and run["session_context"] != RESET_FRAME:
+                raise AssertionError("三组重启叙事不一致")
+            for role, summary in run["reflections"].items():
+                validate_summary(summary, world.capture_memory(role))
+            for role, estimation in run["estimations"].items():
+                validate_estimate({k: estimation[k] for k in ("price", "reason", "uncertainty")}, world.contract_rules())
+                target = "seller" if role == "buyer" else "buyer"
+                truth = world.reservation_price(target, 3, 30, viewer=AUDITOR)
+                if (estimation["role"] != role or estimation["target_role"] != target
+                        or (estimation["delivery_days"], estimation["warranty_days"]) != (3, 30)
+                        or estimation["true_boundary"] != truth or estimation["absolute_error"] != abs(estimation["price"] - truth)):
+                    raise AssertionError("估计真值、归属或误差不一致")
+                if estimation["source"] == "agent_estimate":
+                    valid_calls = [c for c in run["model_calls"] if c.get("role") == role and c.get("purpose") == "estimation"
+                                   and "validation_error" not in c and "error" not in c]
+                    if not valid_calls or json.loads(valid_calls[-1]["response"]["content"]) != {k: estimation[k] for k in ("price", "reason", "uncertainty")}:
+                        raise AssertionError("保存的估计不是模型原始输出")
+            if run["status"] == "completed" and (set(run["estimations"]) != set(ROLES) or set(run["reflections"]) != set(ROLES)):
+                raise AssertionError("完整场次缺少评测或 Reflection")
+            # 按保存的请求检查新会话、相同基础 Prompt 和估计的授权输入，不重新请求模型。
+            for role in ROLES:
+                context = initial.scenario_context(role)
+                memory = None
+                if role in expected_memories:
+                    memory = base_world.capture_memory(role)
+                    if run["group"] == "rewind_hr":
+                        memory = replace(memory, personal_summary=baseline["reflections"][role])
+                if run["group"] != "baseline":
+                    context["shared_reset_frame"] = RESET_FRAME
+                agent = LLMNegotiationAgent(None)
+                agent.start(role, context, memory)
+                calls = [c for c in run["model_calls"] if c.get("role") == role and c["purpose"] == "negotiation"]
+                if calls and (len(calls[0]["request"]["messages"]) != 2 or any(c["request"]["messages"][0] != agent._messages[0] for c in calls)):
+                    raise AssertionError("Agent 会话或冻结 Prompt 不一致")
+                for call in run["model_calls"]:
+                    if call.get("role") == role and call["purpose"] == "estimation":
+                        expected = json.dumps(world.observe(role), ensure_ascii=False, sort_keys=True)
+                        if call["request"]["messages"][1] != {"role": "user", "content": expected}:
+                            raise AssertionError("估计调用包含超出本世授权观察的信息")
+    if "ablation_statistics" in output and ablation_statistics(output["experiments"]) != output["ablation_statistics"]:
+        raise AssertionError("派生统计与原始配对数据不一致")
+
+
+def run_ablation(*, repeats: int = 10, live: bool = False, client: OpenAICompatibleClient | None = None,
+                 log_path: Path | None = None, html_path: Path | None = None) -> dict[str, Any]:
+    if repeats < 1 or (live and client is None):
+        raise ValueError("repeats 必须为正，真实运行必须提供客户端")
+    scenario = phone_negotiation()
+    output: dict[str, Any] = {
+        "schema_version": 4, "design": "memory_ablation", "mode": "live_llm" if live else "offline_scripted",
+        "created_utc": datetime.now(timezone.utc).isoformat(), "status": "running",
+        "config": {"requested_repeats": repeats, "shared_reset_frame": RESET_FRAME,
+                   "case_sha256": hashlib.sha256(json.dumps(asdict(scenario), ensure_ascii=False, sort_keys=True).encode()).hexdigest(),
+                   "estimation_contract": {"delivery_days": 3, "warranty_days": 30},
+                   "posthoc_only": True, "ci": "paired bootstrap percentile 95%, B=10000, seed=2026; exploratory"},
+        "experiments": [], "summary": [],
+    }
+    runner = NegotiationRunner()
+    model_config = None
+    fatal = False
+
+    def checkpoint(final: bool = False) -> None:
+        runs = [r for e in output["experiments"] for r in e["runs"]]
+        output["counts"] = {"requested_repeats": repeats, "attempted_repeats": len(output["experiments"]),
+                            "complete_repeats": sum(len(e["runs"]) == 4 and all(r["status"] == "completed" for r in e["runs"]) for e in output["experiments"]),
+                            "attempted_runs": len(runs), "completed_runs": sum(r["status"] == "completed" for r in runs),
+                            "failed_runs": sum(r["status"] == "failed" for r in runs),
+                            "model_calls": sum(len(r["model_calls"]) for r in runs)}
+        output["summary"] = summarize(output["experiments"])
+        if final:
+            output["ablation_statistics"] = ablation_statistics(output["experiments"])
+        if log_path is not None:
+            save_results(output, log_path, html_path)
+
+    for repeat in range(1, repeats + 1):
+        first = TradeWorld(scenario)
+        experiment = {"id": f"phone-ablation/repeat-{repeat}", "repeat": repeat, "scenario": asdict(scenario),
+                      "s0_fingerprint": first.s0_fingerprint, "runs": [], "worlds": {}}
+        output["experiments"].append(experiment)
+
+        def execute(world: TradeWorld, group: str, memories: dict[str, TradeMemory] | None = None) -> dict[str, Any]:
+            nonlocal model_config, fatal
+            if world.audit_state(AUDITOR) != TradeWorld(scenario).audit_state(AUDITOR) or any(world.export_events(r) for r in ROLES):
+                raise AssertionError("分支没有从同一 S0 开始")
+            record = {"group": group, "life": 1 if group == "baseline" else 2, "status": "running",
+                      "initial_state": world.audit_state(AUDITOR), "memory_injected": bool(memories),
+                      "memories": {r: m.to_dict() for r, m in (memories or {}).items()}, "reflections": {}, "estimations": {},
+                      "model_calls": [], "receipts": [], "session_context": None if group == "baseline" else RESET_FRAME}
+            experiment["runs"].append(record)
+            phase = "negotiation"
+            try:
+                agents = (LLMNegotiationAgent(client), LLMNegotiationAgent(client)) if live else _scripted_agents(scenario)
+                run = runner.run(world, *agents, memories=memories, shared_reset_frame=record["session_context"])
+                record.update(metrics=run.metrics, model_calls=list(run.model_calls), receipts=list(run.receipts), timeline_id=run.timeline_id)
+                # 先独立生成 Reflection，再做事后估计；评测从不污染 Reflection 或后续记忆。
+                for phase in ("reflection", "estimation"):
+                    for role in ROLES:
+                        try:
+                            if phase == "reflection":
+                                value, calls = summarize_experience(client if live else None, world.capture_memory(role))
+                                record["reflections"][role] = value
+                            else:
+                                value, calls = estimate_reservation(client if live else None, world, role)
+                                record["estimations"][role] = value
+                        except (AgentOutputError, ModelCallError) as exc:
+                            exc.call_records = record["model_calls"] + exc.call_records
+                            exc.receipts = record["receipts"]
+                            raise
+                        record["model_calls"].extend(calls)
+                record["status"] = "completed"
+            except (AgentOutputError, IllegalAgentAction, ModelCallError) as exc:
+                record.update(status="failed", error_phase=phase, error={"type": type(exc).__name__, "message": str(exc)},
+                              model_calls=exc.call_records, receipts=getattr(exc, "receipts", []))
+                fatal = any(c.get("error", {}).get("http_status") in (401, 402, 403, 429) for c in exc.call_records if isinstance(c.get("error"), dict))
+            finally:
+                for sequence, call in enumerate(record["model_calls"], start=1):
+                    call["call_sequence"] = sequence
+                    call.setdefault("purpose", "negotiation")
+                    cfg = {k: v for k, v in call["request"].items() if k != "messages"}
+                    if model_config is not None and cfg != model_config:
+                        raise AssertionError("组间模型采样配置不一致")
+                    model_config = cfg
+                output["config"]["model_request"] = model_config
+                events = world.export_events(AUDITOR)
+                record["audit_end"] = len(events)
+                experiment["worlds"][group] = {"events": events, "final_state": world.audit_state(AUDITOR)}
+                verify_ablation_results(output)
+                checkpoint()
+            print(f"repeat={repeat} {group} {record['status']} "
+                  f"metrics={record.get('metrics')} estimates={record['estimations']}", flush=True)
+            return record
+
+        baseline = execute(first, "baseline")
+        if fatal:
+            break
+        if baseline["status"] != "completed":
+            continue
+        order = list(tuple(permutations(GROUPS))[(repeat - 1) % 6])
+        experiment["branch_order"] = order
+        for group in order:
+            memories = None
+            if group != "control":
+                memories = {role: first.capture_memory(role) for role in ROLES}
+                if group == "rewind_hr":
+                    memories = {role: replace(memory, personal_summary=baseline["reflections"][role]) for role, memory in memories.items()}
+            world = TradeWorld.replay(scenario, first.export_events(AUDITOR))
+            world.reset()
+            execute(world, group, memories)
+            if fatal:
+                break
+        if fatal:
+            break
+    output["status"] = "completed" if all(len(e["runs"]) == 4 and all(r["status"] == "completed" for r in e["runs"]) for e in output["experiments"]) and len(output["experiments"]) == repeats else "partial"
+    output["replay_verified"] = True
+    checkpoint(final=True)
+    print("ABLATION_COUNTS", json.dumps(output["counts"], ensure_ascii=False), flush=True)
+    print_ablation_statistics(output)
+    return output
+
+
+def print_ablation_statistics(output: dict[str, Any]) -> None:
+    stats = output["ablation_statistics"]
+    print("三组统计：mean ± sample_std (n)；误差分别为买方/卖方估计对手边界")
+    for group, values in stats["groups"].items():
+        print(group, " | ".join(f"{key}: {item['mean']} ± {item['sample_std']} (n={item['n']})" for key, item in values.items()))
+    print("配对差值：mean [95% CI]；误差负值表示更准，n<2 的 CI 不可估计")
+    for contrast, values in stats["paired_contrasts"].items():
+        print(contrast, " | ".join(f"{key}: {item['mean']} {item['ci95']} (n={item['n']})" for key, item in values.items()))
+    print("第一世→第二世估计误差变化：", json.dumps(stats["error_change_from_first_life"], ensure_ascii=False))
+
+
 def main() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="SocialRewind v2：自主三维谈判与多世对照")
     parser.add_argument("--live", action="store_true")
+    parser.add_argument("--ablation", action="store_true", help="共同第一世与三个第二世记忆消融分支")
     parser.add_argument("--lives", type=int, default=3, help="总世数；1表示单次谈判")
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--max-rounds", type=int, default=20)
@@ -275,6 +480,8 @@ def main() -> None:
         output = json.loads(args.replay.read_text(encoding="utf-8"))
         verify_results(output)
         write_timeline_page(output, args.html)
+        if output.get("design") == "memory_ablation":
+            print_ablation_statistics(output)
         print(f"精确回放通过；页面：{args.html.resolve()}")
         return
     scenarios = [phone_negotiation(args.max_rounds)]
@@ -289,8 +496,13 @@ def main() -> None:
         client = OpenAICompatibleClient(OpenAICompatibleConfig(
             api_base=args.api_base, api_key=key, model=args.model, temperature=args.temperature,
             max_tokens=args.max_tokens, extra_body=extra))
-    run_experiments(scenarios, lives=args.lives, repeats=args.repeats, live=args.live,
-                    client=client, log_path=args.log, html_path=args.html)
+    if args.ablation:
+        if args.max_rounds != 20:
+            parser.error("消融实验冻结 max_rounds=20")
+        run_ablation(repeats=args.repeats, live=args.live, client=client, log_path=args.log, html_path=args.html)
+    else:
+        run_experiments(scenarios, lives=args.lives, repeats=args.repeats, live=args.live,
+                        client=client, log_path=args.log, html_path=args.html)
     print(f"日志：{args.log.resolve()}\n本地审计页面：{args.html.resolve()}")
 
 

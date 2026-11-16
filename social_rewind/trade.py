@@ -311,6 +311,18 @@ class TradeWorld:
         return {"price_min": c.price_min, "price_max": c.price_max, "price_step": c.price_step,
                 "delivery_days": list(c.delivery_days), "warranty_days": list(c.warranty_days)}
 
+    def reservation_price(self, role: str, delivery_days: int, warranty_days: int, *, viewer: str) -> int | None:
+        """研究者事后评测真值；不向 Agent 提供对手边界查询接口。"""
+        if viewer != AUDITOR:
+            raise PermissionError("客观接受边界仅审计者可查")
+        c = self._scenario.contract
+        if c is None or role not in ROLES or delivery_days not in c.delivery_days or warranty_days not in c.warranty_days:
+            raise ValueError("无效角色或合同条款")
+        minimum = getattr(getattr(c, role), "minimum_utility", 0)
+        prices = [p for p in range(c.price_min, c.price_max + 1, c.price_step)
+                  if self._utility(role, p, delivery_days, warranty_days) >= minimum]
+        return (max(prices) if role == "buyer" else min(prices)) if prices else None
+
     @property
     def s0_fingerprint(self) -> str:
         return hashlib.sha256(self._s0_json.encode("utf-8")).hexdigest()

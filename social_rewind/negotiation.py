@@ -238,6 +238,10 @@ class LLMNegotiationAgent:
             if memory is not None
             else context.get("experiment_context", "【第一世】你没有前世记忆。这是一场新的谈判。")
         )
+        if "shared_reset_frame" in context:
+            # 消融组共享完全相同的叙事；只替换独立记忆数据，不改谈判目标与规则。
+            rebirth = context["shared_reset_frame"] + "\n【本人授权记忆数据】\n" + json.dumps(
+                memory.to_dict() if memory is not None else None, ensure_ascii=False, sort_keys=True)
         schema = """每次只输出一个 JSON 对象，禁止 Markdown：
 {
   "decision": {
@@ -421,6 +425,7 @@ class NegotiationRunner:
         *,
         memories: dict[str, TradeMemory] | None = None,
         session_context: str | None = None,
+        shared_reset_frame: str | None = None,
         on_turn: Callable[[str, AgentTurn, dict[str, Any]], None] | None = None,
     ) -> NegotiationRun:
         memory_map = memories or {}
@@ -434,6 +439,8 @@ class NegotiationRunner:
             context = world.scenario_context(role)
             if session_context is not None:
                 context["experiment_context"] = session_context
+            if shared_reset_frame is not None:
+                context["shared_reset_frame"] = shared_reset_frame
             agent.start(role, context, memory)
 
         calls: list[dict[str, Any]] = []
