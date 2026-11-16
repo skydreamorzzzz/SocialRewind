@@ -28,3 +28,6 @@ Thumbs.db
 # Local scratch output (the curated JSONL example remains tracked)
 *.tmp
 *.bak
+
+# 本地批量实验输出与浏览器验证缓存；精选示例放在 examples/
+runs/

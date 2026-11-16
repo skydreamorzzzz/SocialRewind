@@ -9,7 +9,9 @@ from typing import Any
 
 
 class ModelCallError(RuntimeError):
-    pass
+    def __init__(self, message: str, call_records: list[dict[str, Any]] | None = None) -> None:
+        super().__init__(message)
+        self.call_records = call_records or []
 
 
 @dataclass(frozen=True)
@@ -48,6 +50,8 @@ class OpenAICompatibleClient:
         request_body.update(copy.deepcopy(self._config.extra_body))
         encoded = json.dumps(request_body, ensure_ascii=False).encode("utf-8")
         endpoint = self._config.api_base.rstrip("/") + "/chat/completions"
+        failed_record = {"provider": "openai-compatible", "endpoint": endpoint,
+                         "request": copy.deepcopy(request_body)}
         request = urllib.request.Request(
             endpoint,
             data=encoded,
@@ -62,18 +66,22 @@ class OpenAICompatibleClient:
                 raw_response = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")[:500]
-            raise ModelCallError(f"模型 API HTTP {exc.code}: {detail}") from exc
+            failed_record["error"] = {"http_status": exc.code, "detail": detail}
+            raise ModelCallError(f"模型 API HTTP {exc.code}: {detail}", [failed_record]) from exc
         except (urllib.error.URLError, TimeoutError) as exc:
-            raise ModelCallError(f"模型 API 调用失败: {exc}") from exc
+            failed_record["error"] = {"type": type(exc).__name__, "message": str(exc)}
+            raise ModelCallError(f"模型 API 调用失败: {exc}", [failed_record]) from exc
         try:
             payload = json.loads(raw_response)
             choice = payload["choices"][0]
             content = choice["message"]["content"]
         except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
-            raise ModelCallError("模型 API 响应不符合 chat/completions 契约") from exc
+            failed_record["error"] = {"message": "响应不符合 chat/completions 契约", "raw_response": raw_response}
+            raise ModelCallError("模型 API 响应不符合 chat/completions 契约", [failed_record]) from exc
         if not isinstance(content, str) or not content.strip():
+            failed_record["error"] = {"message": "模型未返回最终内容", "raw_response": payload}
             raise ModelCallError(
-                f"模型未返回最终内容，finish_reason={choice.get('finish_reason')}"
+                f"模型未返回最终内容，finish_reason={choice.get('finish_reason')}", [failed_record]
             )
         record = {
             "provider": "openai-compatible",

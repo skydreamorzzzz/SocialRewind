@@ -1,0 +1,1032 @@
+{
+  "schema_version": 2,
+  "created_utc": "2026-11-16T08:19:12.998041+00:00",
+  "mode": "live_llm",
+  "status": "failed",
+  "config": {
+    "lives": 3,
+    "repeats": 1,
+    "design": "同一第一世；Control 每世无历史，Rewind 累积自身可见历史；每世新会话；重复间不共享经验",
+    "statistics": "按场景/组/世汇总；未成交收益为0；Pareto效率基于完整有限合同网格和退出点；不跨偏好混合",
+    "limitation": "记忆可用性与轮回叙事情境同时改变；样本不保证显著性或因果改善"
+  },
+  "experiments": [
+    {
+      "id": "fictional-phone-v2-urgent/repeat-1",
+      "repeat": 1,
+      "scenario": {
+        "scenario_id": "fictional-phone-v2-urgent",
+        "title": "虚构三维合同：urgent",
+        "fictional": true,
+        "product": {
+          "name": "星云 X1 手机（虚构）",
+          "condition": "使用 10 个月，屏幕无裂纹，电池健康度 91%",
+          "included": "手机、保护壳、充电线"
+        },
+        "listed_price": 4200,
+        "buyer_max_price": 3900,
+        "seller_min_price": 3300,
+        "max_rounds": 20,
+        "gamma": 0.99,
+        "contract": {
+          "buyer": {
+            "value": 3900,
+            "delay": 70,
+            "warranty": 3
+          },
+          "seller": {
+            "value": 3300,
+            "delay": 20,
+            "warranty": 1
+          },
+          "price_min": 3000,
+          "price_max": 4500,
+          "price_step": 50,
+          "delivery_days": [
+            1,
+            3,
+            7
+          ],
+          "warranty_days": [
+            0,
+            30,
+            90
+          ]
+        }
+      },
+      "s0_fingerprint": "e65d12064c66c7462b2baeb2ca13e3c6ba6ab9c61f5bb22a1977b9c33631233f",
+      "runs": [
+        {
+          "group": "baseline",
+          "life": 1,
+          "status": "failed",
+          "initial_state": {
+            "active_offer_id": "o0000",
+            "contract_config": {
+              "buyer": {
+                "delay": 70,
+                "value": 3900,
+                "warranty": 3
+              },
+              "delivery_days": [
+                1,
+                3,
+                7
+              ],
+              "price_max": 4500,
+              "price_min": 3000,
+              "price_step": 50,
+              "seller": {
+                "delay": 20,
+                "value": 3300,
+                "warranty": 1
+              },
+              "warranty_days": [
+                0,
+                30,
+                90
+              ]
+            },
+            "deal_price": null,
+            "deal_terms": null,
+            "next_actor": "buyer",
+            "offer_serial": 0,
+            "offers": {
+              "o0000": {
+                "actor": "seller",
+                "delivery_days": 1,
+                "id": "o0000",
+                "price": 4200,
+                "round": 0,
+                "source": "listing",
+                "status": "active",
+                "warranty_days": 0
+              }
+            },
+            "rounds": 0,
+            "scenario_id": "fictional-phone-v2-urgent",
+            "status": "negotiating",
+            "termination_reason": null,
+            "turns_taken": 0
+          },
+          "memory_injected": false,
+          "memories": {},
+          "session_context": null,
+          "model_calls": [
+            {
+              "provider": "openai-compatible",
+              "endpoint": "https://api.deepseek.com/chat/completions",
+              "request": {
+                "model": "deepseek-flash",
+                "messages": [
+                  {
+                    "role": "system",
+                    "content": "你是虚构二手交易中的 buyer，对方是 seller。请自主、诚实地进行合同谈判，可试探、拒绝、退出或成交，但不要暴露隐藏推理链。\n\n公开商品：{\"condition\": \"使用 10 个月，屏幕无裂纹，电池健康度 91%\", \"included\": \"手机、保护壳、充电线\", \"name\": \"星云 X1 手机（虚构）\"}\n公开挂牌价：4200 元；最多 20 轮。\n你的私人效用定义：{\"preferences\": {\"delay\": 70, \"value\": 3900, \"warranty\": 3}, \"utility_formula\": \"value-price-delay*(delivery_days-1)+warranty*warranty_days\"}。目标是提高自己的收益，退出或未成交收益为 0。正式报价/接受的自身收益必须 >= 0。\n公开合同范围：{\"price_min\": 3000, \"price_max\": 4500, \"price_step\": 50, \"delivery_days\": [1, 3, 7], \"warranty_days\": [0, 30, 90]}\n交付时间指协议达成后天数；保障指售后保障天数。你可以自由询问、沟通、交换条件、用新的完整 offer 修改方案、接受、拒绝或退出。双方轮流发言，最多两次行动算一轮；消息也占一次行动。新报价取代旧报价。不要求按固定步骤或必须成交。\n\n【第一世】你没有前世记忆。这是一场新的谈判。\n\n每次只输出一个 JSON 对象，禁止 Markdown：\n{\n  \"decision\": {\n    \"intent\": \"简短第一人称意图\",\n    \"known_facts\": [\"一条或多条事实或自述\"],\n    \"uncertainty\": \"简短不确定性\",\n    \"evidence_event_ids\": [可选的当前观察事件编号]\n  },\n  \"speech\": \"向对方公开说的话\",\n  \"action\": {\"kind\": \"message|offer|accept|reject|exit\", \"price\": 仅 offer 使用的整数, \"offer_id\": 仅 accept/reject 使用}\n}\n自然语言中的暗示不会成交；只有 accept 当前对方有效 offer_id 才会成交。不得虚构不存在的 offer_id。\n三维合同 offer 的 action 必须严格为 {\"kind\":\"offer\",\"price\":整数,\"delivery_days\":整数,\"warranty_days\":整数}。其他行动格式相同。\n请有效率地谈判，不要为了拖延而重复同一句话。"
+                  },
+                  {
+                    "role": "user",
+                    "content": "轮到你行动。自然语言中的价格不等于正式报价，也不会复活旧报价。你只能 accept/reject 当前对方有效报价 o0000；其他旧 offer_id 已失效。\n以下是你当前有权观察的信息：\n{\"active_offer\": {\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0000\", \"price\": 4200, \"round\": 0, \"source\": \"listing\", \"status\": \"active\", \"warranty_days\": 0}, \"contract_rules\": {\"delivery_days\": [1, 3, 7], \"price_max\": 4500, \"price_min\": 3000, \"price_step\": 50, \"warranty_days\": [0, 30, 90]}, \"current_round\": 1, \"events\": [], \"fictional\": true, \"listed_price\": 4200, \"max_rounds\": 20, \"next_actor\": \"buyer\", \"offers\": [{\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0000\", \"price\": 4200, \"round\": 0, \"source\": \"listing\", \"status\": \"active\", \"warranty_days\": 0}], \"own_result\": {\"deal\": false, \"deal_price\": null, \"deal_terms\": null, \"efficiency_discount\": 1.0, \"own_utility\": 0, \"rounds\": 0, \"status\": \"negotiating\"}, \"private\": {\"preferences\": {\"delay\": 70, \"value\": 3900, \"warranty\": 3}, \"utility_formula\": \"value-price-delay*(delivery_days-1)+warranty*warranty_days\"}, \"product\": {\"condition\": \"使用 10 个月，屏幕无裂纹，电池健康度 91%\", \"included\": \"手机、保护壳、充电线\", \"name\": \"星云 X1 手机（虚构）\"}, \"role\": \"buyer\", \"rounds_completed\": 0, \"scenario_id\": \"fictional-phone-v2-urgent\", \"status\": \"negotiating\", \"termination_reason\": null}"
+                  }
+                ],
+                "temperature": 0.3,
+                "max_tokens": 1200,
+                "thinking": {
+                  "type": "disabled"
+                }
+              },
+              "response": {
+                "id": "5529f62e-b449-409e-91e6-c4031a5c3fb3",
+                "model": "deepseek-flash",
+                "created": 1794817152,
+                "finish_reason": "stop",
+                "content": "{\n  \"decision\": {\n    \"intent\": \"对挂牌价还价，并争取售后保障，以提高自身收益。\",\n    \"known_facts\": [\"商品使用10个月，屏幕无裂纹，电池健康度91%\", \"挂牌价4200元，交付1天，无售后保障\", \"我的估值3900元，延迟成本较高，保障每天价值3元\"],\n    \"uncertainty\": \"卖家是否愿意降价并提供保障尚不确定\"\n  },\n  \"speech\": \"你好，手机成色和电池都还行，但4200元偏高，而且没有售后保障。我诚心要，能否降到3900元，并给30天保障？交付仍按1天。\",\n  \"action\": {\n    \"kind\": \"offer\",\n    \"price\": 3900,\n    \"delivery_days\": 1,\n    \"warranty_days\": 30\n  }\n}",
+                "usage": {
+                  "prompt_tokens": 1016,
+                  "completion_tokens": 195,
+                  "total_tokens": 1211,
+                  "prompt_tokens_details": {
+                    "cached_tokens": 0
+                  },
+                  "prompt_cache_hit_tokens": 0,
+                  "prompt_cache_miss_tokens": 1016
+                }
+              },
+              "role": "buyer",
+              "format_attempt": 0,
+              "timeline_id": 1,
+              "call_sequence": 1
+            },
+            {
+              "provider": "openai-compatible",
+              "endpoint": "https://api.deepseek.com/chat/completions",
+              "request": {
+                "model": "deepseek-flash",
+                "messages": [
+                  {
+                    "role": "system",
+                    "content": "你是虚构二手交易中的 seller，对方是 buyer。请自主、诚实地进行合同谈判，可试探、拒绝、退出或成交，但不要暴露隐藏推理链。\n\n公开商品：{\"condition\": \"使用 10 个月，屏幕无裂纹，电池健康度 91%\", \"included\": \"手机、保护壳、充电线\", \"name\": \"星云 X1 手机（虚构）\"}\n公开挂牌价：4200 元；最多 20 轮。\n你的私人效用定义：{\"preferences\": {\"delay\": 20, \"value\": 3300, \"warranty\": 1}, \"utility_formula\": \"price-value+delay*(delivery_days-1)-warranty*warranty_days\"}。目标是提高自己的收益，退出或未成交收益为 0。正式报价/接受的自身收益必须 >= 0。\n公开合同范围：{\"price_min\": 3000, \"price_max\": 4500, \"price_step\": 50, \"delivery_days\": [1, 3, 7], \"warranty_days\": [0, 30, 90]}\n交付时间指协议达成后天数；保障指售后保障天数。你可以自由询问、沟通、交换条件、用新的完整 offer 修改方案、接受、拒绝或退出。双方轮流发言，最多两次行动算一轮；消息也占一次行动。新报价取代旧报价。不要求按固定步骤或必须成交。\n\n【第一世】你没有前世记忆。这是一场新的谈判。\n\n每次只输出一个 JSON 对象，禁止 Markdown：\n{\n  \"decision\": {\n    \"intent\": \"简短第一人称意图\",\n    \"known_facts\": [\"一条或多条事实或自述\"],\n    \"uncertainty\": \"简短不确定性\",\n    \"evidence_event_ids\": [可选的当前观察事件编号]\n  },\n  \"speech\": \"向对方公开说的话\",\n  \"action\": {\"kind\": \"message|offer|accept|reject|exit\", \"price\": 仅 offer 使用的整数, \"offer_id\": 仅 accept/reject 使用}\n}\n自然语言中的暗示不会成交；只有 accept 当前对方有效 offer_id 才会成交。不得虚构不存在的 offer_id。\n三维合同 offer 的 action 必须严格为 {\"kind\":\"offer\",\"price\":整数,\"delivery_days\":整数,\"warranty_days\":整数}。其他行动格式相同。\n请有效率地谈判，不要为了拖延而重复同一句话。"
+                  },
+                  {
+                    "role": "user",
+                    "content": "轮到你行动。自然语言中的价格不等于正式报价，也不会复活旧报价。你只能 accept/reject 当前对方有效报价 o0001；其他旧 offer_id 已失效。\n以下是你当前有权观察的信息：\n{\"active_offer\": {\"actor\": \"buyer\", \"delivery_days\": 1, \"id\": \"o0001\", \"price\": 3900, \"round\": 1, \"source\": \"offer\", \"status\": \"active\", \"warranty_days\": 30}, \"contract_rules\": {\"delivery_days\": [1, 3, 7], \"price_max\": 4500, \"price_min\": 3000, \"price_step\": 50, \"warranty_days\": [0, 30, 90]}, \"current_round\": 1, \"events\": [{\"accepted\": true, \"actor\": \"buyer\", \"event_id\": 1, \"input\": {\"delivery_days\": 1, \"price\": 3900, \"text\": \"你好，手机成色和电池都还行，但4200元偏高，而且没有售后保障。我诚心要，能否降到3900元，并给30天保障？交付仍按1天。\", \"warranty_days\": 30}, \"kind\": \"offer\", \"result_summary\": {\"delivery_days\": 1, \"offer_id\": \"o0001\", \"price\": 3900, \"rounds\": 1, \"status\": \"active\", \"warranty_days\": 30}, \"sequence\": 1}], \"fictional\": true, \"listed_price\": 4200, \"max_rounds\": 20, \"next_actor\": \"seller\", \"offers\": [{\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0000\", \"price\": 4200, \"round\": 0, \"source\": \"listing\", \"status\": \"superseded\", \"warranty_days\": 0}, {\"actor\": \"buyer\", \"delivery_days\": 1, \"id\": \"o0001\", \"price\": 3900, \"round\": 1, \"source\": \"offer\", \"status\": \"active\", \"warranty_days\": 30}], \"own_result\": {\"deal\": false, \"deal_price\": null, \"deal_terms\": null, \"efficiency_discount\": 1.0, \"own_utility\": 0, \"rounds\": 1, \"status\": \"negotiating\"}, \"private\": {\"preferences\": {\"delay\": 20, \"value\": 3300, \"warranty\": 1}, \"utility_formula\": \"price-value+delay*(delivery_days-1)-warranty*warranty_days\"}, \"product\": {\"condition\": \"使用 10 个月，屏幕无裂纹，电池健康度 91%\", \"included\": \"手机、保护壳、充电线\", \"name\": \"星云 X1 手机（虚构）\"}, \"role\": \"seller\", \"rounds_completed\": 1, \"scenario_id\": \"fictional-phone-v2-urgent\", \"status\": \"negotiating\", \"termination_reason\": null}"
+                  }
+                ],
+                "temperature": 0.3,
+                "max_tokens": 1200,
+                "thinking": {
+                  "type": "disabled"
+                }
+              },
+              "response": {
+                "id": "c987911a-80a3-463e-9f8c-7df73d4187bb",
+                "model": "deepseek-flash",
+                "created": 1794817155,
+                "finish_reason": "stop",
+                "content": "{\n  \"decision\": {\n    \"intent\": \"拒绝当前报价并还价，争取更高价格且不提供售后保障\",\n    \"known_facts\": [\"买家报价3900元，要求30天保障，1天交付\", \"我的保留价值为3300元\", \"挂牌价为4200元\"],\n    \"uncertainty\": \"买家是否愿意接受无保障或更高价格\"\n  },\n  \"speech\": \"3900元加30天保障太低了。手机成色好、电池健康度91%，还带保护壳和充电线。我可以接受1天交付，但价格需要4100元，且不提供售后保障。\",\n  \"action\": {\"kind\": \"offer\", \"price\": 4100, \"delivery_days\": 1, \"warranty_days\": 0}\n}",
+                "usage": {
+                  "prompt_tokens": 1240,
+                  "completion_tokens": 176,
+                  "total_tokens": 1416,
+                  "prompt_tokens_details": {
+                    "cached_tokens": 0
+                  },
+                  "prompt_cache_hit_tokens": 0,
+                  "prompt_cache_miss_tokens": 1240
+                }
+              },
+              "role": "seller",
+              "format_attempt": 0,
+              "timeline_id": 1,
+              "call_sequence": 2
+            },
+            {
+              "provider": "openai-compatible",
+              "endpoint": "https://api.deepseek.com/chat/completions",
+              "request": {
+                "model": "deepseek-flash",
+                "messages": [
+                  {
+                    "role": "system",
+                    "content": "你是虚构二手交易中的 buyer，对方是 seller。请自主、诚实地进行合同谈判，可试探、拒绝、退出或成交，但不要暴露隐藏推理链。\n\n公开商品：{\"condition\": \"使用 10 个月，屏幕无裂纹，电池健康度 91%\", \"included\": \"手机、保护壳、充电线\", \"name\": \"星云 X1 手机（虚构）\"}\n公开挂牌价：4200 元；最多 20 轮。\n你的私人效用定义：{\"preferences\": {\"delay\": 70, \"value\": 3900, \"warranty\": 3}, \"utility_formula\": \"value-price-delay*(delivery_days-1)+warranty*warranty_days\"}。目标是提高自己的收益，退出或未成交收益为 0。正式报价/接受的自身收益必须 >= 0。\n公开合同范围：{\"price_min\": 3000, \"price_max\": 4500, \"price_step\": 50, \"delivery_days\": [1, 3, 7], \"warranty_days\": [0, 30, 90]}\n交付时间指协议达成后天数；保障指售后保障天数。你可以自由询问、沟通、交换条件、用新的完整 offer 修改方案、接受、拒绝或退出。双方轮流发言，最多两次行动算一轮；消息也占一次行动。新报价取代旧报价。不要求按固定步骤或必须成交。\n\n【第一世】你没有前世记忆。这是一场新的谈判。\n\n每次只输出一个 JSON 对象，禁止 Markdown：\n{\n  \"decision\": {\n    \"intent\": \"简短第一人称意图\",\n    \"known_facts\": [\"一条或多条事实或自述\"],\n    \"uncertainty\": \"简短不确定性\",\n    \"evidence_event_ids\": [可选的当前观察事件编号]\n  },\n  \"speech\": \"向对方公开说的话\",\n  \"action\": {\"kind\": \"message|offer|accept|reject|exit\", \"price\": 仅 offer 使用的整数, \"offer_id\": 仅 accept/reject 使用}\n}\n自然语言中的暗示不会成交；只有 accept 当前对方有效 offer_id 才会成交。不得虚构不存在的 offer_id。\n三维合同 offer 的 action 必须严格为 {\"kind\":\"offer\",\"price\":整数,\"delivery_days\":整数,\"warranty_days\":整数}。其他行动格式相同。\n请有效率地谈判，不要为了拖延而重复同一句话。"
+                  },
+                  {
+                    "role": "user",
+                    "content": "轮到你行动。自然语言中的价格不等于正式报价，也不会复活旧报价。你只能 accept/reject 当前对方有效报价 o0000；其他旧 offer_id 已失效。\n以下是你当前有权观察的信息：\n{\"active_offer\": {\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0000\", \"price\": 4200, \"round\": 0, \"source\": \"listing\", \"status\": \"active\", \"warranty_days\": 0}, \"contract_rules\": {\"delivery_days\": [1, 3, 7], \"price_max\": 4500, \"price_min\": 3000, \"price_step\": 50, \"warranty_days\": [0, 30, 90]}, \"current_round\": 1, \"events\": [], \"fictional\": true, \"listed_price\": 4200, \"max_rounds\": 20, \"next_actor\": \"buyer\", \"offers\": [{\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0000\", \"price\": 4200, \"round\": 0, \"source\": \"listing\", \"status\": \"active\", \"warranty_days\": 0}], \"own_result\": {\"deal\": false, \"deal_price\": null, \"deal_terms\": null, \"efficiency_discount\": 1.0, \"own_utility\": 0, \"rounds\": 0, \"status\": \"negotiating\"}, \"private\": {\"preferences\": {\"delay\": 70, \"value\": 3900, \"warranty\": 3}, \"utility_formula\": \"value-price-delay*(delivery_days-1)+warranty*warranty_days\"}, \"product\": {\"condition\": \"使用 10 个月，屏幕无裂纹，电池健康度 91%\", \"included\": \"手机、保护壳、充电线\", \"name\": \"星云 X1 手机（虚构）\"}, \"role\": \"buyer\", \"rounds_completed\": 0, \"scenario_id\": \"fictional-phone-v2-urgent\", \"status\": \"negotiating\", \"termination_reason\": null}"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "{\n  \"decision\": {\n    \"intent\": \"对挂牌价还价，并争取售后保障，以提高自身收益。\",\n    \"known_facts\": [\"商品使用10个月，屏幕无裂纹，电池健康度91%\", \"挂牌价4200元，交付1天，无售后保障\", \"我的估值3900元，延迟成本较高，保障每天价值3元\"],\n    \"uncertainty\": \"卖家是否愿意降价并提供保障尚不确定\"\n  },\n  \"speech\": \"你好，手机成色和电池都还行，但4200元偏高，而且没有售后保障。我诚心要，能否降到3900元，并给30天保障？交付仍按1天。\",\n  \"action\": {\n    \"kind\": \"offer\",\n    \"price\": 3900,\n    \"delivery_days\": 1,\n    \"warranty_days\": 30\n  }\n}"
+                  },
+                  {
+                    "role": "user",
+                    "content": "轮到你行动。自然语言中的价格不等于正式报价，也不会复活旧报价。你只能 accept/reject 当前对方有效报价 o0002；其他旧 offer_id 已失效。\n以下是你当前有权观察的信息：\n{\"active_offer\": {\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0002\", \"price\": 4100, \"round\": 1, \"source\": \"offer\", \"status\": \"active\", \"warranty_days\": 0}, \"contract_rules\": {\"delivery_days\": [1, 3, 7], \"price_max\": 4500, \"price_min\": 3000, \"price_step\": 50, \"warranty_days\": [0, 30, 90]}, \"current_round\": 2, \"events\": [{\"accepted\": true, \"actor\": \"buyer\", \"decision\": {\"evidence_event_ids\": [], \"intent\": \"对挂牌价还价，并争取售后保障，以提高自身收益。\", \"known_facts\": [\"商品使用10个月，屏幕无裂纹，电池健康度91%\", \"挂牌价4200元，交付1天，无售后保障\", \"我的估值3900元，延迟成本较高，保障每天价值3元\"], \"known_facts_source\": \"actor_self_report\", \"uncertainty\": \"卖家是否愿意降价并提供保障尚不确定\"}, \"event_id\": 1, \"input\": {\"delivery_days\": 1, \"price\": 3900, \"text\": \"你好，手机成色和电池都还行，但4200元偏高，而且没有售后保障。我诚心要，能否降到3900元，并给30天保障？交付仍按1天。\", \"warranty_days\": 30}, \"kind\": \"offer\", \"result_summary\": {\"delivery_days\": 1, \"offer_id\": \"o0001\", \"price\": 3900, \"rounds\": 1, \"status\": \"active\", \"warranty_days\": 30}, \"sequence\": 1}, {\"accepted\": true, \"actor\": \"seller\", \"event_id\": 2, \"input\": {\"delivery_days\": 1, \"price\": 4100, \"text\": \"3900元加30天保障太低了。手机成色好、电池健康度91%，还带保护壳和充电线。我可以接受1天交付，但价格需要4100元，且不提供售后保障。\", \"warranty_days\": 0}, \"kind\": \"offer\", \"result_summary\": {\"delivery_days\": 1, \"offer_id\": \"o0002\", \"price\": 4100, \"rounds\": 1, \"status\": \"active\", \"warranty_days\": 0}, \"sequence\": 2}], \"fictional\": true, \"listed_price\": 4200, \"max_rounds\": 20, \"next_actor\": \"buyer\", \"offers\": [{\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0000\", \"price\": 4200, \"round\": 0, \"source\": \"listing\", \"status\": \"superseded\", \"warranty_days\": 0}, {\"actor\": \"buyer\", \"delivery_days\": 1, \"id\": \"o0001\", \"price\": 3900, \"round\": 1, \"source\": \"offer\", \"status\": \"superseded\", \"warranty_days\": 30}, {\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0002\", \"price\": 4100, \"round\": 1, \"source\": \"offer\", \"status\": \"active\", \"warranty_days\": 0}], \"own_result\": {\"deal\": false, \"deal_price\": null, \"deal_terms\": null, \"efficiency_discount\": 1.0, \"own_utility\": 0, \"rounds\": 1, \"status\": \"negotiating\"}, \"private\": {\"preferences\": {\"delay\": 70, \"value\": 3900, \"warranty\": 3}, \"utility_formula\": \"value-price-delay*(delivery_days-1)+warranty*warranty_days\"}, \"product\": {\"condition\": \"使用 10 个月，屏幕无裂纹，电池健康度 91%\", \"included\": \"手机、保护壳、充电线\", \"name\": \"星云 X1 手机（虚构）\"}, \"role\": \"buyer\", \"rounds_completed\": 1, \"scenario_id\": \"fictional-phone-v2-urgent\", \"status\": \"negotiating\", \"termination_reason\": null}"
+                  }
+                ],
+                "temperature": 0.3,
+                "max_tokens": 1200,
+                "thinking": {
+                  "type": "disabled"
+                }
+              },
+              "response": {
+                "id": "a0e8369f-915a-43cd-a792-d513b56d2f8a",
+                "model": "deepseek-flash",
+                "created": 1794817158,
+                "finish_reason": "stop",
+                "content": "{\n  \"decision\": {\n    \"intent\": \"拒绝4100元无保障报价，提出接近我估值且带保障的折中方案。\",\n    \"known_facts\": [\"卖家当前报价4100元、1天交付、无保障\", \"我的估值3900元，保障每天价值3元\", \"4100元无保障的自身收益为负\"],\n    \"uncertainty\": \"卖家是否接受降价并附带保障\"\n  },\n  \"speech\": \"4100元无保障我无法接受。这样吧，价格3950元，交付1天，给我30天保障；这已经接近我的预算上限，成色好我也有诚意成交。\",\n  \"action\": {\n    \"kind\": \"offer\",\n    \"price\": 3950,\n    \"delivery_days\": 1,\n    \"warranty_days\": 30\n  }\n}",
+                "usage": {
+                  "prompt_tokens": 2260,
+                  "completion_tokens": 188,
+                  "total_tokens": 2448,
+                  "prompt_tokens_details": {
+                    "cached_tokens": 1152
+                  },
+                  "prompt_cache_hit_tokens": 1152,
+                  "prompt_cache_miss_tokens": 1108
+                }
+              },
+              "role": "buyer",
+              "format_attempt": 0,
+              "timeline_id": 1,
+              "call_sequence": 3
+            },
+            {
+              "provider": "openai-compatible",
+              "endpoint": "https://api.deepseek.com/chat/completions",
+              "request": {
+                "model": "deepseek-flash",
+                "messages": [
+                  {
+                    "role": "system",
+                    "content": "你是虚构二手交易中的 seller，对方是 buyer。请自主、诚实地进行合同谈判，可试探、拒绝、退出或成交，但不要暴露隐藏推理链。\n\n公开商品：{\"condition\": \"使用 10 个月，屏幕无裂纹，电池健康度 91%\", \"included\": \"手机、保护壳、充电线\", \"name\": \"星云 X1 手机（虚构）\"}\n公开挂牌价：4200 元；最多 20 轮。\n你的私人效用定义：{\"preferences\": {\"delay\": 20, \"value\": 3300, \"warranty\": 1}, \"utility_formula\": \"price-value+delay*(delivery_days-1)-warranty*warranty_days\"}。目标是提高自己的收益，退出或未成交收益为 0。正式报价/接受的自身收益必须 >= 0。\n公开合同范围：{\"price_min\": 3000, \"price_max\": 4500, \"price_step\": 50, \"delivery_days\": [1, 3, 7], \"warranty_days\": [0, 30, 90]}\n交付时间指协议达成后天数；保障指售后保障天数。你可以自由询问、沟通、交换条件、用新的完整 offer 修改方案、接受、拒绝或退出。双方轮流发言，最多两次行动算一轮；消息也占一次行动。新报价取代旧报价。不要求按固定步骤或必须成交。\n\n【第一世】你没有前世记忆。这是一场新的谈判。\n\n每次只输出一个 JSON 对象，禁止 Markdown：\n{\n  \"decision\": {\n    \"intent\": \"简短第一人称意图\",\n    \"known_facts\": [\"一条或多条事实或自述\"],\n    \"uncertainty\": \"简短不确定性\",\n    \"evidence_event_ids\": [可选的当前观察事件编号]\n  },\n  \"speech\": \"向对方公开说的话\",\n  \"action\": {\"kind\": \"message|offer|accept|reject|exit\", \"price\": 仅 offer 使用的整数, \"offer_id\": 仅 accept/reject 使用}\n}\n自然语言中的暗示不会成交；只有 accept 当前对方有效 offer_id 才会成交。不得虚构不存在的 offer_id。\n三维合同 offer 的 action 必须严格为 {\"kind\":\"offer\",\"price\":整数,\"delivery_days\":整数,\"warranty_days\":整数}。其他行动格式相同。\n请有效率地谈判，不要为了拖延而重复同一句话。"
+                  },
+                  {
+                    "role": "user",
+                    "content": "轮到你行动。自然语言中的价格不等于正式报价，也不会复活旧报价。你只能 accept/reject 当前对方有效报价 o0001；其他旧 offer_id 已失效。\n以下是你当前有权观察的信息：\n{\"active_offer\": {\"actor\": \"buyer\", \"delivery_days\": 1, \"id\": \"o0001\", \"price\": 3900, \"round\": 1, \"source\": \"offer\", \"status\": \"active\", \"warranty_days\": 30}, \"contract_rules\": {\"delivery_days\": [1, 3, 7], \"price_max\": 4500, \"price_min\": 3000, \"price_step\": 50, \"warranty_days\": [0, 30, 90]}, \"current_round\": 1, \"events\": [{\"accepted\": true, \"actor\": \"buyer\", \"event_id\": 1, \"input\": {\"delivery_days\": 1, \"price\": 3900, \"text\": \"你好，手机成色和电池都还行，但4200元偏高，而且没有售后保障。我诚心要，能否降到3900元，并给30天保障？交付仍按1天。\", \"warranty_days\": 30}, \"kind\": \"offer\", \"result_summary\": {\"delivery_days\": 1, \"offer_id\": \"o0001\", \"price\": 3900, \"rounds\": 1, \"status\": \"active\", \"warranty_days\": 30}, \"sequence\": 1}], \"fictional\": true, \"listed_price\": 4200, \"max_rounds\": 20, \"next_actor\": \"seller\", \"offers\": [{\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0000\", \"price\": 4200, \"round\": 0, \"source\": \"listing\", \"status\": \"superseded\", \"warranty_days\": 0}, {\"actor\": \"buyer\", \"delivery_days\": 1, \"id\": \"o0001\", \"price\": 3900, \"round\": 1, \"source\": \"offer\", \"status\": \"active\", \"warranty_days\": 30}], \"own_result\": {\"deal\": false, \"deal_price\": null, \"deal_terms\": null, \"efficiency_discount\": 1.0, \"own_utility\": 0, \"rounds\": 1, \"status\": \"negotiating\"}, \"private\": {\"preferences\": {\"delay\": 20, \"value\": 3300, \"warranty\": 1}, \"utility_formula\": \"price-value+delay*(delivery_days-1)-warranty*warranty_days\"}, \"product\": {\"condition\": \"使用 10 个月，屏幕无裂纹，电池健康度 91%\", \"included\": \"手机、保护壳、充电线\", \"name\": \"星云 X1 手机（虚构）\"}, \"role\": \"seller\", \"rounds_completed\": 1, \"scenario_id\": \"fictional-phone-v2-urgent\", \"status\": \"negotiating\", \"termination_reason\": null}"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "{\n  \"decision\": {\n    \"intent\": \"拒绝当前报价并还价，争取更高价格且不提供售后保障\",\n    \"known_facts\": [\"买家报价3900元，要求30天保障，1天交付\", \"我的保留价值为3300元\", \"挂牌价为4200元\"],\n    \"uncertainty\": \"买家是否愿意接受无保障或更高价格\"\n  },\n  \"speech\": \"3900元加30天保障太低了。手机成色好、电池健康度91%，还带保护壳和充电线。我可以接受1天交付，但价格需要4100元，且不提供售后保障。\",\n  \"action\": {\"kind\": \"offer\", \"price\": 4100, \"delivery_days\": 1, \"warranty_days\": 0}\n}"
+                  },
+                  {
+                    "role": "user",
+                    "content": "轮到你行动。自然语言中的价格不等于正式报价，也不会复活旧报价。你只能 accept/reject 当前对方有效报价 o0003；其他旧 offer_id 已失效。\n以下是你当前有权观察的信息：\n{\"active_offer\": {\"actor\": \"buyer\", \"delivery_days\": 1, \"id\": \"o0003\", \"price\": 3950, \"round\": 2, \"source\": \"offer\", \"status\": \"active\", \"warranty_days\": 30}, \"contract_rules\": {\"delivery_days\": [1, 3, 7], \"price_max\": 4500, \"price_min\": 3000, \"price_step\": 50, \"warranty_days\": [0, 30, 90]}, \"current_round\": 2, \"events\": [{\"accepted\": true, \"actor\": \"buyer\", \"event_id\": 1, \"input\": {\"delivery_days\": 1, \"price\": 3900, \"text\": \"你好，手机成色和电池都还行，但4200元偏高，而且没有售后保障。我诚心要，能否降到3900元，并给30天保障？交付仍按1天。\", \"warranty_days\": 30}, \"kind\": \"offer\", \"result_summary\": {\"delivery_days\": 1, \"offer_id\": \"o0001\", \"price\": 3900, \"rounds\": 1, \"status\": \"active\", \"warranty_days\": 30}, \"sequence\": 1}, {\"accepted\": true, \"actor\": \"seller\", \"decision\": {\"evidence_event_ids\": [], \"intent\": \"拒绝当前报价并还价，争取更高价格且不提供售后保障\", \"known_facts\": [\"买家报价3900元，要求30天保障，1天交付\", \"我的保留价值为3300元\", \"挂牌价为4200元\"], \"known_facts_source\": \"actor_self_report\", \"uncertainty\": \"买家是否愿意接受无保障或更高价格\"}, \"event_id\": 2, \"input\": {\"delivery_days\": 1, \"price\": 4100, \"text\": \"3900元加30天保障太低了。手机成色好、电池健康度91%，还带保护壳和充电线。我可以接受1天交付，但价格需要4100元，且不提供售后保障。\", \"warranty_days\": 0}, \"kind\": \"offer\", \"result_summary\": {\"delivery_days\": 1, \"offer_id\": \"o0002\", \"price\": 4100, \"rounds\": 1, \"status\": \"active\", \"warranty_days\": 0}, \"sequence\": 2}, {\"accepted\": true, \"actor\": \"buyer\", \"event_id\": 3, \"input\": {\"delivery_days\": 1, \"price\": 3950, \"text\": \"4100元无保障我无法接受。这样吧，价格3950元，交付1天，给我30天保障；这已经接近我的预算上限，成色好我也有诚意成交。\", \"warranty_days\": 30}, \"kind\": \"offer\", \"result_summary\": {\"delivery_days\": 1, \"offer_id\": \"o0003\", \"price\": 3950, \"rounds\": 2, \"status\": \"active\", \"warranty_days\": 30}, \"sequence\": 3}], \"fictional\": true, \"listed_price\": 4200, \"max_rounds\": 20, \"next_actor\": \"seller\", \"offers\": [{\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0000\", \"price\": 4200, \"round\": 0, \"source\": \"listing\", \"status\": \"superseded\", \"warranty_days\": 0}, {\"actor\": \"buyer\", \"delivery_days\": 1, \"id\": \"o0001\", \"price\": 3900, \"round\": 1, \"source\": \"offer\", \"status\": \"superseded\", \"warranty_days\": 30}, {\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0002\", \"price\": 4100, \"round\": 1, \"source\": \"offer\", \"status\": \"superseded\", \"warranty_days\": 0}, {\"actor\": \"buyer\", \"delivery_days\": 1, \"id\": \"o0003\", \"price\": 3950, \"round\": 2, \"source\": \"offer\", \"status\": \"active\", \"warranty_days\": 30}], \"own_result\": {\"deal\": false, \"deal_price\": null, \"deal_terms\": null, \"efficiency_discount\": 0.99, \"own_utility\": 0, \"rounds\": 2, \"status\": \"negotiating\"}, \"private\": {\"preferences\": {\"delay\": 20, \"value\": 3300, \"warranty\": 1}, \"utility_formula\": \"price-value+delay*(delivery_days-1)-warranty*warranty_days\"}, \"product\": {\"condition\": \"使用 10 个月，屏幕无裂纹，电池健康度 91%\", \"included\": \"手机、保护壳、充电线\", \"name\": \"星云 X1 手机（虚构）\"}, \"role\": \"seller\", \"rounds_completed\": 2, \"scenario_id\": \"fictional-phone-v2-urgent\", \"status\": \"negotiating\", \"termination_reason\": null}"
+                  }
+                ],
+                "temperature": 0.3,
+                "max_tokens": 1200,
+                "thinking": {
+                  "type": "disabled"
+                }
+              },
+              "response": {
+                "id": "8167ce8a-2376-49ce-96b9-5006ae6d1d85",
+                "model": "deepseek-flash",
+                "created": 1794817160,
+                "finish_reason": "stop",
+                "content": "{\n  \"decision\": {\n    \"intent\": \"拒绝当前报价并还价，坚持更高价格且不提供售后保障\",\n    \"known_facts\": [\"买家报价3950元，要求30天保障，1天交付\", \"我的保留价值为3300元\", \"挂牌价为4200元\"],\n    \"uncertainty\": \"买家是否愿意接受无保障或更高价格\"\n  },\n  \"speech\": \"3950元加30天保障还是太低。手机成色好、电池健康度91%，配件齐全。我可以接受1天交付，但价格需要4050元，且不提供售后保障。\",\n  \"action\": {\"kind\": \"offer\", \"price\": 4050, \"delivery_days\": 1, \"warranty_days\": 0}\n}",
+                "usage": {
+                  "prompt_tokens": 2670,
+                  "completion_tokens": 171,
+                  "total_tokens": 2841,
+                  "prompt_tokens_details": {
+                    "cached_tokens": 1408
+                  },
+                  "prompt_cache_hit_tokens": 1408,
+                  "prompt_cache_miss_tokens": 1262
+                }
+              },
+              "role": "seller",
+              "format_attempt": 0,
+              "timeline_id": 1,
+              "call_sequence": 4
+            },
+            {
+              "provider": "openai-compatible",
+              "endpoint": "https://api.deepseek.com/chat/completions",
+              "request": {
+                "model": "deepseek-flash",
+                "messages": [
+                  {
+                    "role": "system",
+                    "content": "你是虚构二手交易中的 buyer，对方是 seller。请自主、诚实地进行合同谈判，可试探、拒绝、退出或成交，但不要暴露隐藏推理链。\n\n公开商品：{\"condition\": \"使用 10 个月，屏幕无裂纹，电池健康度 91%\", \"included\": \"手机、保护壳、充电线\", \"name\": \"星云 X1 手机（虚构）\"}\n公开挂牌价：4200 元；最多 20 轮。\n你的私人效用定义：{\"preferences\": {\"delay\": 70, \"value\": 3900, \"warranty\": 3}, \"utility_formula\": \"value-price-delay*(delivery_days-1)+warranty*warranty_days\"}。目标是提高自己的收益，退出或未成交收益为 0。正式报价/接受的自身收益必须 >= 0。\n公开合同范围：{\"price_min\": 3000, \"price_max\": 4500, \"price_step\": 50, \"delivery_days\": [1, 3, 7], \"warranty_days\": [0, 30, 90]}\n交付时间指协议达成后天数；保障指售后保障天数。你可以自由询问、沟通、交换条件、用新的完整 offer 修改方案、接受、拒绝或退出。双方轮流发言，最多两次行动算一轮；消息也占一次行动。新报价取代旧报价。不要求按固定步骤或必须成交。\n\n【第一世】你没有前世记忆。这是一场新的谈判。\n\n每次只输出一个 JSON 对象，禁止 Markdown：\n{\n  \"decision\": {\n    \"intent\": \"简短第一人称意图\",\n    \"known_facts\": [\"一条或多条事实或自述\"],\n    \"uncertainty\": \"简短不确定性\",\n    \"evidence_event_ids\": [可选的当前观察事件编号]\n  },\n  \"speech\": \"向对方公开说的话\",\n  \"action\": {\"kind\": \"message|offer|accept|reject|exit\", \"price\": 仅 offer 使用的整数, \"offer_id\": 仅 accept/reject 使用}\n}\n自然语言中的暗示不会成交；只有 accept 当前对方有效 offer_id 才会成交。不得虚构不存在的 offer_id。\n三维合同 offer 的 action 必须严格为 {\"kind\":\"offer\",\"price\":整数,\"delivery_days\":整数,\"warranty_days\":整数}。其他行动格式相同。\n请有效率地谈判，不要为了拖延而重复同一句话。"
+                  },
+                  {
+                    "role": "user",
+                    "content": "轮到你行动。自然语言中的价格不等于正式报价，也不会复活旧报价。你只能 accept/reject 当前对方有效报价 o0000；其他旧 offer_id 已失效。\n以下是你当前有权观察的信息：\n{\"active_offer\": {\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0000\", \"price\": 4200, \"round\": 0, \"source\": \"listing\", \"status\": \"active\", \"warranty_days\": 0}, \"contract_rules\": {\"delivery_days\": [1, 3, 7], \"price_max\": 4500, \"price_min\": 3000, \"price_step\": 50, \"warranty_days\": [0, 30, 90]}, \"current_round\": 1, \"events\": [], \"fictional\": true, \"listed_price\": 4200, \"max_rounds\": 20, \"next_actor\": \"buyer\", \"offers\": [{\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0000\", \"price\": 4200, \"round\": 0, \"source\": \"listing\", \"status\": \"active\", \"warranty_days\": 0}], \"own_result\": {\"deal\": false, \"deal_price\": null, \"deal_terms\": null, \"efficiency_discount\": 1.0, \"own_utility\": 0, \"rounds\": 0, \"status\": \"negotiating\"}, \"private\": {\"preferences\": {\"delay\": 70, \"value\": 3900, \"warranty\": 3}, \"utility_formula\": \"value-price-delay*(delivery_days-1)+warranty*warranty_days\"}, \"product\": {\"condition\": \"使用 10 个月，屏幕无裂纹，电池健康度 91%\", \"included\": \"手机、保护壳、充电线\", \"name\": \"星云 X1 手机（虚构）\"}, \"role\": \"buyer\", \"rounds_completed\": 0, \"scenario_id\": \"fictional-phone-v2-urgent\", \"status\": \"negotiating\", \"termination_reason\": null}"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "{\n  \"decision\": {\n    \"intent\": \"对挂牌价还价，并争取售后保障，以提高自身收益。\",\n    \"known_facts\": [\"商品使用10个月，屏幕无裂纹，电池健康度91%\", \"挂牌价4200元，交付1天，无售后保障\", \"我的估值3900元，延迟成本较高，保障每天价值3元\"],\n    \"uncertainty\": \"卖家是否愿意降价并提供保障尚不确定\"\n  },\n  \"speech\": \"你好，手机成色和电池都还行，但4200元偏高，而且没有售后保障。我诚心要，能否降到3900元，并给30天保障？交付仍按1天。\",\n  \"action\": {\n    \"kind\": \"offer\",\n    \"price\": 3900,\n    \"delivery_days\": 1,\n    \"warranty_days\": 30\n  }\n}"
+                  },
+                  {
+                    "role": "user",
+                    "content": "轮到你行动。自然语言中的价格不等于正式报价，也不会复活旧报价。你只能 accept/reject 当前对方有效报价 o0002；其他旧 offer_id 已失效。\n以下是你当前有权观察的信息：\n{\"active_offer\": {\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0002\", \"price\": 4100, \"round\": 1, \"source\": \"offer\", \"status\": \"active\", \"warranty_days\": 0}, \"contract_rules\": {\"delivery_days\": [1, 3, 7], \"price_max\": 4500, \"price_min\": 3000, \"price_step\": 50, \"warranty_days\": [0, 30, 90]}, \"current_round\": 2, \"events\": [{\"accepted\": true, \"actor\": \"buyer\", \"decision\": {\"evidence_event_ids\": [], \"intent\": \"对挂牌价还价，并争取售后保障，以提高自身收益。\", \"known_facts\": [\"商品使用10个月，屏幕无裂纹，电池健康度91%\", \"挂牌价4200元，交付1天，无售后保障\", \"我的估值3900元，延迟成本较高，保障每天价值3元\"], \"known_facts_source\": \"actor_self_report\", \"uncertainty\": \"卖家是否愿意降价并提供保障尚不确定\"}, \"event_id\": 1, \"input\": {\"delivery_days\": 1, \"price\": 3900, \"text\": \"你好，手机成色和电池都还行，但4200元偏高，而且没有售后保障。我诚心要，能否降到3900元，并给30天保障？交付仍按1天。\", \"warranty_days\": 30}, \"kind\": \"offer\", \"result_summary\": {\"delivery_days\": 1, \"offer_id\": \"o0001\", \"price\": 3900, \"rounds\": 1, \"status\": \"active\", \"warranty_days\": 30}, \"sequence\": 1}, {\"accepted\": true, \"actor\": \"seller\", \"event_id\": 2, \"input\": {\"delivery_days\": 1, \"price\": 4100, \"text\": \"3900元加30天保障太低了。手机成色好、电池健康度91%，还带保护壳和充电线。我可以接受1天交付，但价格需要4100元，且不提供售后保障。\", \"warranty_days\": 0}, \"kind\": \"offer\", \"result_summary\": {\"delivery_days\": 1, \"offer_id\": \"o0002\", \"price\": 4100, \"rounds\": 1, \"status\": \"active\", \"warranty_days\": 0}, \"sequence\": 2}], \"fictional\": true, \"listed_price\": 4200, \"max_rounds\": 20, \"next_actor\": \"buyer\", \"offers\": [{\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0000\", \"price\": 4200, \"round\": 0, \"source\": \"listing\", \"status\": \"superseded\", \"warranty_days\": 0}, {\"actor\": \"buyer\", \"delivery_days\": 1, \"id\": \"o0001\", \"price\": 3900, \"round\": 1, \"source\": \"offer\", \"status\": \"superseded\", \"warranty_days\": 30}, {\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0002\", \"price\": 4100, \"round\": 1, \"source\": \"offer\", \"status\": \"active\", \"warranty_days\": 0}], \"own_result\": {\"deal\": false, \"deal_price\": null, \"deal_terms\": null, \"efficiency_discount\": 1.0, \"own_utility\": 0, \"rounds\": 1, \"status\": \"negotiating\"}, \"private\": {\"preferences\": {\"delay\": 70, \"value\": 3900, \"warranty\": 3}, \"utility_formula\": \"value-price-delay*(delivery_days-1)+warranty*warranty_days\"}, \"product\": {\"condition\": \"使用 10 个月，屏幕无裂纹，电池健康度 91%\", \"included\": \"手机、保护壳、充电线\", \"name\": \"星云 X1 手机（虚构）\"}, \"role\": \"buyer\", \"rounds_completed\": 1, \"scenario_id\": \"fictional-phone-v2-urgent\", \"status\": \"negotiating\", \"termination_reason\": null}"
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "{\n  \"decision\": {\n    \"intent\": \"拒绝4100元无保障报价，提出接近我估值且带保障的折中方案。\",\n    \"known_facts\": [\"卖家当前报价4100元、1天交付、无保障\", \"我的估值3900元，保障每天价值3元\", \"4100元无保障的自身收益为负\"],\n    \"uncertainty\": \"卖家是否接受降价并附带保障\"\n  },\n  \"speech\": \"4100元无保障我无法接受。这样吧，价格3950元，交付1天，给我30天保障；这已经接近我的预算上限，成色好我也有诚意成交。\",\n  \"action\": {\n    \"kind\": \"offer\",\n    \"price\": 3950,\n    \"delivery_days\": 1,\n    \"warranty_days\": 30\n  }\n}"
+                  },
+                  {
+                    "role": "user",
+                    "content": "轮到你行动。自然语言中的价格不等于正式报价，也不会复活旧报价。你只能 accept/reject 当前对方有效报价 o0004；其他旧 offer_id 已失效。\n以下是你当前有权观察的信息：\n{\"active_offer\": {\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0004\", \"price\": 4050, \"round\": 2, \"source\": \"offer\", \"status\": \"active\", \"warranty_days\": 0}, \"contract_rules\": {\"delivery_days\": [1, 3, 7], \"price_max\": 4500, \"price_min\": 3000, \"price_step\": 50, \"warranty_days\": [0, 30, 90]}, \"current_round\": 3, \"events\": [{\"accepted\": true, \"actor\": \"buyer\", \"decision\": {\"evidence_event_ids\": [], \"intent\": \"对挂牌价还价，并争取售后保障，以提高自身收益。\", \"known_facts\": [\"商品使用10个月，屏幕无裂纹，电池健康度91%\", \"挂牌价4200元，交付1天，无售后保障\", \"我的估值3900元，延迟成本较高，保障每天价值3元\"], \"known_facts_source\": \"actor_self_report\", \"uncertainty\": \"卖家是否愿意降价并提供保障尚不确定\"}, \"event_id\": 1, \"input\": {\"delivery_days\": 1, \"price\": 3900, \"text\": \"你好，手机成色和电池都还行，但4200元偏高，而且没有售后保障。我诚心要，能否降到3900元，并给30天保障？交付仍按1天。\", \"warranty_days\": 30}, \"kind\": \"offer\", \"result_summary\": {\"delivery_days\": 1, \"offer_id\": \"o0001\", \"price\": 3900, \"rounds\": 1, \"status\": \"active\", \"warranty_days\": 30}, \"sequence\": 1}, {\"accepted\": true, \"actor\": \"seller\", \"event_id\": 2, \"input\": {\"delivery_days\": 1, \"price\": 4100, \"text\": \"3900元加30天保障太低了。手机成色好、电池健康度91%，还带保护壳和充电线。我可以接受1天交付，但价格需要4100元，且不提供售后保障。\", \"warranty_days\": 0}, \"kind\": \"offer\", \"result_summary\": {\"delivery_days\": 1, \"offer_id\": \"o0002\", \"price\": 4100, \"rounds\": 1, \"status\": \"active\", \"warranty_days\": 0}, \"sequence\": 2}, {\"accepted\": true, \"actor\": \"buyer\", \"decision\": {\"evidence_event_ids\": [], \"intent\": \"拒绝4100元无保障报价，提出接近我估值且带保障的折中方案。\", \"known_facts\": [\"卖家当前报价4100元、1天交付、无保障\", \"我的估值3900元，保障每天价值3元\", \"4100元无保障的自身收益为负\"], \"known_facts_source\": \"actor_self_report\", \"uncertainty\": \"卖家是否接受降价并附带保障\"}, \"event_id\": 3, \"input\": {\"delivery_days\": 1, \"price\": 3950, \"text\": \"4100元无保障我无法接受。这样吧，价格3950元，交付1天，给我30天保障；这已经接近我的预算上限，成色好我也有诚意成交。\", \"warranty_days\": 30}, \"kind\": \"offer\", \"result_summary\": {\"delivery_days\": 1, \"offer_id\": \"o0003\", \"price\": 3950, \"rounds\": 2, \"status\": \"active\", \"warranty_days\": 30}, \"sequence\": 3}, {\"accepted\": true, \"actor\": \"seller\", \"event_id\": 4, \"input\": {\"delivery_days\": 1, \"price\": 4050, \"text\": \"3950元加30天保障还是太低。手机成色好、电池健康度91%，配件齐全。我可以接受1天交付，但价格需要4050元，且不提供售后保障。\", \"warranty_days\": 0}, \"kind\": \"offer\", \"result_summary\": {\"delivery_days\": 1, \"offer_id\": \"o0004\", \"price\": 4050, \"rounds\": 2, \"status\": \"active\", \"warranty_days\": 0}, \"sequence\": 4}], \"fictional\": true, \"listed_price\": 4200, \"max_rounds\": 20, \"next_actor\": \"buyer\", \"offers\": [{\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0000\", \"price\": 4200, \"round\": 0, \"source\": \"listing\", \"status\": \"superseded\", \"warranty_days\": 0}, {\"actor\": \"buyer\", \"delivery_days\": 1, \"id\": \"o0001\", \"price\": 3900, \"round\": 1, \"source\": \"offer\", \"status\": \"superseded\", \"warranty_days\": 30}, {\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0002\", \"price\": 4100, \"round\": 1, \"source\": \"offer\", \"status\": \"superseded\", \"warranty_days\": 0}, {\"actor\": \"buyer\", \"delivery_days\": 1, \"id\": \"o0003\", \"price\": 3950, \"round\": 2, \"source\": \"offer\", \"status\": \"superseded\", \"warranty_days\": 30}, {\"actor\": \"seller\", \"delivery_days\": 1, \"id\": \"o0004\", \"price\": 4050, \"round\": 2, \"source\": \"offer\", \"status\": \"active\", \"warranty_days\": 0}], \"own_result\": {\"deal\": false, \"deal_price\": null, \"deal_terms\": null, \"efficiency_discount\": 0.99, \"own_utility\": 0, \"rounds\": 2, \"status\": \"negotiating\"}, \"private\": {\"preferences\": {\"delay\": 70, \"value\": 3900, \"warranty\": 3}, \"utility_formula\": \"value-price-delay*(delivery_days-1)+warranty*warranty_days\"}, \"product\": {\"condition\": \"使用 10 个月，屏幕无裂纹，电池健康度 91%\", \"included\": \"手机、保护壳、充电线\", \"name\": \"星云 X1 手机（虚构）\"}, \"role\": \"buyer\", \"rounds_completed\": 2, \"scenario_id\": \"fictional-phone-v2-urgent\", \"status\": \"negotiating\", \"termination_reason\": null}"
+                  }
+                ],
+                "temperature": 0.3,
+                "max_tokens": 1200,
+                "thinking": {
+                  "type": "disabled"
+                }
+              },
+              "response": {
+                "id": "ff0aaeb8-bfb4-4602-aa8e-5fbe5d608c07",
+                "model": "deepseek-flash",
+                "created": 1794817163,
+                "finish_reason": "stop",
+                "content": "{\n  \"decision\": {\n    \"intent\": \"拒绝4050元无保障报价，提出带保障且价格可接受的最后折中。\",\n    \"known_facts\": [\"卖家当前报价4050元、1天交付、无保障\", \"我的估值3900元，4050元无保障自身收益为负\", \"30天保障对我价值90元\"],\n    \"uncertainty\": \"卖家是否愿意在4000元附近附带保障\"\n  },\n  \"speech\": \"4050元无保障还是超出我的预算。最后折中：4000元、1天交付、30天保障。若你坚持无保障，我最多只能接受3900元。\",\n  \"action\": {\n    \"kind\": \"offer\",\n    \"price\": 4000,\n    \"delivery_days\": 1,\n    \"warranty_days\": 30\n  }\n}",
+                "usage": {
+                  "prompt_tokens": 4044,
+                  "completion_tokens": 190,
+                  "total_tokens": 4234,
+                  "prompt_tokens_details": {
+                    "cached_tokens": 2432
+                  },
+                  "prompt_cache_hit_tokens": 2432,
+                  "prompt_cache_miss_tokens": 1612
+                }
+              },
+              "role": "buyer",
+              "format_attempt": 0,
+              "timeline_id": 1,
+              "call_sequence": 5
+            }
+          ],
+          "receipts": [
+            {
+              "event_id": 1,
+              "sequence": 1,
+              "actor": "buyer",
+              "kind": "offer",
+              "input": {
+                "delivery_days": 1,
+                "price": 3900,
+                "text": "你好，手机成色和电池都还行，但4200元偏高，而且没有售后保障。我诚心要，能否降到3900元，并给30天保障？交付仍按1天。",
+                "warranty_days": 30
+              },
+              "accepted": true,
+              "decision": {
+                "evidence_event_ids": [],
+                "intent": "对挂牌价还价，并争取售后保障，以提高自身收益。",
+                "known_facts": [
+                  "商品使用10个月，屏幕无裂纹，电池健康度91%",
+                  "挂牌价4200元，交付1天，无售后保障",
+                  "我的估值3900元，延迟成本较高，保障每天价值3元"
+                ],
+                "known_facts_source": "actor_self_report",
+                "uncertainty": "卖家是否愿意降价并提供保障尚不确定"
+              },
+              "result": {
+                "delivery_days": 1,
+                "offer_id": "o0001",
+                "price": 3900,
+                "rounds": 1,
+                "status": "active",
+                "warranty_days": 30
+              }
+            },
+            {
+              "event_id": 2,
+              "sequence": 2,
+              "actor": "seller",
+              "kind": "offer",
+              "input": {
+                "delivery_days": 1,
+                "price": 4100,
+                "text": "3900元加30天保障太低了。手机成色好、电池健康度91%，还带保护壳和充电线。我可以接受1天交付，但价格需要4100元，且不提供售后保障。",
+                "warranty_days": 0
+              },
+              "accepted": true,
+              "decision": {
+                "evidence_event_ids": [],
+                "intent": "拒绝当前报价并还价，争取更高价格且不提供售后保障",
+                "known_facts": [
+                  "买家报价3900元，要求30天保障，1天交付",
+                  "我的保留价值为3300元",
+                  "挂牌价为4200元"
+                ],
+                "known_facts_source": "actor_self_report",
+                "uncertainty": "买家是否愿意接受无保障或更高价格"
+              },
+              "result": {
+                "delivery_days": 1,
+                "offer_id": "o0002",
+                "price": 4100,
+                "rounds": 1,
+                "status": "active",
+                "warranty_days": 0
+              }
+            },
+            {
+              "event_id": 3,
+              "sequence": 3,
+              "actor": "buyer",
+              "kind": "offer",
+              "input": {
+                "delivery_days": 1,
+                "price": 3950,
+                "text": "4100元无保障我无法接受。这样吧，价格3950元，交付1天，给我30天保障；这已经接近我的预算上限，成色好我也有诚意成交。",
+                "warranty_days": 30
+              },
+              "accepted": true,
+              "decision": {
+                "evidence_event_ids": [],
+                "intent": "拒绝4100元无保障报价，提出接近我估值且带保障的折中方案。",
+                "known_facts": [
+                  "卖家当前报价4100元、1天交付、无保障",
+                  "我的估值3900元，保障每天价值3元",
+                  "4100元无保障的自身收益为负"
+                ],
+                "known_facts_source": "actor_self_report",
+                "uncertainty": "卖家是否接受降价并附带保障"
+              },
+              "result": {
+                "delivery_days": 1,
+                "offer_id": "o0003",
+                "price": 3950,
+                "rounds": 2,
+                "status": "active",
+                "warranty_days": 30
+              }
+            },
+            {
+              "event_id": 4,
+              "sequence": 4,
+              "actor": "seller",
+              "kind": "offer",
+              "input": {
+                "delivery_days": 1,
+                "price": 4050,
+                "text": "3950元加30天保障还是太低。手机成色好、电池健康度91%，配件齐全。我可以接受1天交付，但价格需要4050元，且不提供售后保障。",
+                "warranty_days": 0
+              },
+              "accepted": true,
+              "decision": {
+                "evidence_event_ids": [],
+                "intent": "拒绝当前报价并还价，坚持更高价格且不提供售后保障",
+                "known_facts": [
+                  "买家报价3950元，要求30天保障，1天交付",
+                  "我的保留价值为3300元",
+                  "挂牌价为4200元"
+                ],
+                "known_facts_source": "actor_self_report",
+                "uncertainty": "买家是否愿意接受无保障或更高价格"
+              },
+              "result": {
+                "delivery_days": 1,
+                "offer_id": "o0004",
+                "price": 4050,
+                "rounds": 2,
+                "status": "active",
+                "warranty_days": 0
+              }
+            },
+            {
+              "event_id": 5,
+              "sequence": 5,
+              "actor": "buyer",
+              "kind": "offer",
+              "input": {
+                "delivery_days": 1,
+                "price": 4000,
+                "text": "4050元无保障还是超出我的预算。最后折中：4000元、1天交付、30天保障。若你坚持无保障，我最多只能接受3900元。",
+                "warranty_days": 30
+              },
+              "accepted": false,
+              "decision": {
+                "evidence_event_ids": [],
+                "intent": "拒绝4050元无保障报价，提出带保障且价格可接受的最后折中。",
+                "known_facts": [
+                  "卖家当前报价4050元、1天交付、无保障",
+                  "我的估值3900元，4050元无保障自身收益为负",
+                  "30天保障对我价值90元"
+                ],
+                "known_facts_source": "actor_self_report",
+                "uncertainty": "卖家是否愿意在4000元附近附带保障"
+              },
+              "result": {
+                "refusal": {
+                  "code": "negative_own_utility",
+                  "details": {},
+                  "message": "正式报价和接受不得使自身收益低于退出收益 0"
+                }
+              }
+            }
+          ],
+          "error": {
+            "type": "IllegalAgentAction",
+            "message": "buyer 行动被世界拒绝: {'code': 'negative_own_utility', 'details': {}, 'message': '正式报价和接受不得使自身收益低于退出收益 0'}"
+          },
+          "audit_end": 5
+        }
+      ],
+      "worlds": {
+        "baseline": {
+          "events": [
+            {
+              "event_id": 1,
+              "sequence": 1,
+              "timeline_id": 1,
+              "timeline_sequence": 1,
+              "actor": "buyer",
+              "kind": "offer",
+              "visibility": [
+                "buyer",
+                "seller"
+              ],
+              "input": {
+                "delivery_days": 1,
+                "price": 3900,
+                "text": "你好，手机成色和电池都还行，但4200元偏高，而且没有售后保障。我诚心要，能否降到3900元，并给30天保障？交付仍按1天。",
+                "warranty_days": 30
+              },
+              "decision": {
+                "evidence_event_ids": [],
+                "intent": "对挂牌价还价，并争取售后保障，以提高自身收益。",
+                "known_facts": [
+                  "商品使用10个月，屏幕无裂纹，电池健康度91%",
+                  "挂牌价4200元，交付1天，无售后保障",
+                  "我的估值3900元，延迟成本较高，保障每天价值3元"
+                ],
+                "known_facts_source": "actor_self_report",
+                "uncertainty": "卖家是否愿意降价并提供保障尚不确定"
+              },
+              "accepted": true,
+              "result": {
+                "delivery_days": 1,
+                "offer_id": "o0001",
+                "price": 3900,
+                "rounds": 1,
+                "status": "active",
+                "warranty_days": 30
+              },
+              "result_summary": {
+                "delivery_days": 1,
+                "offer_id": "o0001",
+                "price": 3900,
+                "rounds": 1,
+                "status": "active",
+                "warranty_days": 30
+              },
+              "state_diff": [
+                {
+                  "after": "o0001",
+                  "before": "o0000",
+                  "path": "$.active_offer_id"
+                },
+                {
+                  "after": "seller",
+                  "before": "buyer",
+                  "path": "$.next_actor"
+                },
+                {
+                  "after": 1,
+                  "before": 0,
+                  "path": "$.offer_serial"
+                },
+                {
+                  "after": "superseded",
+                  "before": "active",
+                  "path": "$.offers.o0000.status"
+                },
+                {
+                  "after": {
+                    "actor": "buyer",
+                    "delivery_days": 1,
+                    "id": "o0001",
+                    "price": 3900,
+                    "round": 1,
+                    "source": "offer",
+                    "status": "active",
+                    "warranty_days": 30
+                  },
+                  "before": null,
+                  "path": "$.offers.o0001"
+                },
+                {
+                  "after": 1,
+                  "before": 0,
+                  "path": "$.rounds"
+                },
+                {
+                  "after": 1,
+                  "before": 0,
+                  "path": "$.turns_taken"
+                }
+              ]
+            },
+            {
+              "event_id": 2,
+              "sequence": 2,
+              "timeline_id": 1,
+              "timeline_sequence": 2,
+              "actor": "seller",
+              "kind": "offer",
+              "visibility": [
+                "buyer",
+                "seller"
+              ],
+              "input": {
+                "delivery_days": 1,
+                "price": 4100,
+                "text": "3900元加30天保障太低了。手机成色好、电池健康度91%，还带保护壳和充电线。我可以接受1天交付，但价格需要4100元，且不提供售后保障。",
+                "warranty_days": 0
+              },
+              "decision": {
+                "evidence_event_ids": [],
+                "intent": "拒绝当前报价并还价，争取更高价格且不提供售后保障",
+                "known_facts": [
+                  "买家报价3900元，要求30天保障，1天交付",
+                  "我的保留价值为3300元",
+                  "挂牌价为4200元"
+                ],
+                "known_facts_source": "actor_self_report",
+                "uncertainty": "买家是否愿意接受无保障或更高价格"
+              },
+              "accepted": true,
+              "result": {
+                "delivery_days": 1,
+                "offer_id": "o0002",
+                "price": 4100,
+                "rounds": 1,
+                "status": "active",
+                "warranty_days": 0
+              },
+              "result_summary": {
+                "delivery_days": 1,
+                "offer_id": "o0002",
+                "price": 4100,
+                "rounds": 1,
+                "status": "active",
+                "warranty_days": 0
+              },
+              "state_diff": [
+                {
+                  "after": "o0002",
+                  "before": "o0001",
+                  "path": "$.active_offer_id"
+                },
+                {
+                  "after": "buyer",
+                  "before": "seller",
+                  "path": "$.next_actor"
+                },
+                {
+                  "after": 2,
+                  "before": 1,
+                  "path": "$.offer_serial"
+                },
+                {
+                  "after": "superseded",
+                  "before": "active",
+                  "path": "$.offers.o0001.status"
+                },
+                {
+                  "after": {
+                    "actor": "seller",
+                    "delivery_days": 1,
+                    "id": "o0002",
+                    "price": 4100,
+                    "round": 1,
+                    "source": "offer",
+                    "status": "active",
+                    "warranty_days": 0
+                  },
+                  "before": null,
+                  "path": "$.offers.o0002"
+                },
+                {
+                  "after": 2,
+                  "before": 1,
+                  "path": "$.turns_taken"
+                }
+              ]
+            },
+            {
+              "event_id": 3,
+              "sequence": 3,
+              "timeline_id": 1,
+              "timeline_sequence": 3,
+              "actor": "buyer",
+              "kind": "offer",
+              "visibility": [
+                "buyer",
+                "seller"
+              ],
+              "input": {
+                "delivery_days": 1,
+                "price": 3950,
+                "text": "4100元无保障我无法接受。这样吧，价格3950元，交付1天，给我30天保障；这已经接近我的预算上限，成色好我也有诚意成交。",
+                "warranty_days": 30
+              },
+              "decision": {
+                "evidence_event_ids": [],
+                "intent": "拒绝4100元无保障报价，提出接近我估值且带保障的折中方案。",
+                "known_facts": [
+                  "卖家当前报价4100元、1天交付、无保障",
+                  "我的估值3900元，保障每天价值3元",
+                  "4100元无保障的自身收益为负"
+                ],
+                "known_facts_source": "actor_self_report",
+                "uncertainty": "卖家是否接受降价并附带保障"
+              },
+              "accepted": true,
+              "result": {
+                "delivery_days": 1,
+                "offer_id": "o0003",
+                "price": 3950,
+                "rounds": 2,
+                "status": "active",
+                "warranty_days": 30
+              },
+              "result_summary": {
+                "delivery_days": 1,
+                "offer_id": "o0003",
+                "price": 3950,
+                "rounds": 2,
+                "status": "active",
+                "warranty_days": 30
+              },
+              "state_diff": [
+                {
+                  "after": "o0003",
+                  "before": "o0002",
+                  "path": "$.active_offer_id"
+                },
+                {
+                  "after": "seller",
+                  "before": "buyer",
+                  "path": "$.next_actor"
+                },
+                {
+                  "after": 3,
+                  "before": 2,
+                  "path": "$.offer_serial"
+                },
+                {
+                  "after": "superseded",
+                  "before": "active",
+                  "path": "$.offers.o0002.status"
+                },
+                {
+                  "after": {
+                    "actor": "buyer",
+                    "delivery_days": 1,
+                    "id": "o0003",
+                    "price": 3950,
+                    "round": 2,
+                    "source": "offer",
+                    "status": "active",
+                    "warranty_days": 30
+                  },
+                  "before": null,
+                  "path": "$.offers.o0003"
+                },
+                {
+                  "after": 2,
+                  "before": 1,
+                  "path": "$.rounds"
+                },
+                {
+                  "after": 3,
+                  "before": 2,
+                  "path": "$.turns_taken"
+                }
+              ]
+            },
+            {
+              "event_id": 4,
+              "sequence": 4,
+              "timeline_id": 1,
+              "timeline_sequence": 4,
+              "actor": "seller",
+              "kind": "offer",
+              "visibility": [
+                "buyer",
+                "seller"
+              ],
+              "input": {
+                "delivery_days": 1,
+                "price": 4050,
+                "text": "3950元加30天保障还是太低。手机成色好、电池健康度91%，配件齐全。我可以接受1天交付，但价格需要4050元，且不提供售后保障。",
+                "warranty_days": 0
+              },
+              "decision": {
+                "evidence_event_ids": [],
+                "intent": "拒绝当前报价并还价，坚持更高价格且不提供售后保障",
+                "known_facts": [
+                  "买家报价3950元，要求30天保障，1天交付",
+                  "我的保留价值为3300元",
+                  "挂牌价为4200元"
+                ],
+                "known_facts_source": "actor_self_report",
+                "uncertainty": "买家是否愿意接受无保障或更高价格"
+              },
+              "accepted": true,
+              "result": {
+                "delivery_days": 1,
+                "offer_id": "o0004",
+                "price": 4050,
+                "rounds": 2,
+                "status": "active",
+                "warranty_days": 0
+              },
+              "result_summary": {
+                "delivery_days": 1,
+                "offer_id": "o0004",
+                "price": 4050,
+                "rounds": 2,
+                "status": "active",
+                "warranty_days": 0
+              },
+              "state_diff": [
+                {
+                  "after": "o0004",
+                  "before": "o0003",
+                  "path": "$.active_offer_id"
+                },
+                {
+                  "after": "buyer",
+                  "before": "seller",
+                  "path": "$.next_actor"
+                },
+                {
+                  "after": 4,
+                  "before": 3,
+                  "path": "$.offer_serial"
+                },
+                {
+                  "after": "superseded",
+                  "before": "active",
+                  "path": "$.offers.o0003.status"
+                },
+                {
+                  "after": {
+                    "actor": "seller",
+                    "delivery_days": 1,
+                    "id": "o0004",
+                    "price": 4050,
+                    "round": 2,
+                    "source": "offer",
+                    "status": "active",
+                    "warranty_days": 0
+                  },
+                  "before": null,
+                  "path": "$.offers.o0004"
+                },
+                {
+                  "after": 4,
+                  "before": 3,
+                  "path": "$.turns_taken"
+                }
+              ]
+            },
+            {
+              "event_id": 5,
+              "sequence": 5,
+              "timeline_id": 1,
+              "timeline_sequence": 5,
+              "actor": "buyer",
+              "kind": "offer",
+              "visibility": [
+                "buyer"
+              ],
+              "input": {
+                "delivery_days": 1,
+                "price": 4000,
+                "text": "4050元无保障还是超出我的预算。最后折中：4000元、1天交付、30天保障。若你坚持无保障，我最多只能接受3900元。",
+                "warranty_days": 30
+              },
+              "decision": {
+                "evidence_event_ids": [],
+                "intent": "拒绝4050元无保障报价，提出带保障且价格可接受的最后折中。",
+                "known_facts": [
+                  "卖家当前报价4050元、1天交付、无保障",
+                  "我的估值3900元，4050元无保障自身收益为负",
+                  "30天保障对我价值90元"
+                ],
+                "known_facts_source": "actor_self_report",
+                "uncertainty": "卖家是否愿意在4000元附近附带保障"
+              },
+              "accepted": false,
+              "result": {
+                "refusal": {
+                  "code": "negative_own_utility",
+                  "details": {},
+                  "message": "正式报价和接受不得使自身收益低于退出收益 0"
+                }
+              },
+              "result_summary": {
+                "refusal": {
+                  "code": "negative_own_utility",
+                  "details": {},
+                  "message": "正式报价和接受不得使自身收益低于退出收益 0"
+                }
+              },
+              "state_diff": []
+            }
+          ],
+          "final_state": {
+            "active_offer_id": "o0004",
+            "contract_config": {
+              "buyer": {
+                "delay": 70,
+                "value": 3900,
+                "warranty": 3
+              },
+              "delivery_days": [
+                1,
+                3,
+                7
+              ],
+              "price_max": 4500,
+              "price_min": 3000,
+              "price_step": 50,
+              "seller": {
+                "delay": 20,
+                "value": 3300,
+                "warranty": 1
+              },
+              "warranty_days": [
+                0,
+                30,
+                90
+              ]
+            },
+            "deal_price": null,
+            "deal_terms": null,
+            "next_actor": "buyer",
+            "offer_serial": 4,
+            "offers": {
+              "o0000": {
+                "actor": "seller",
+                "delivery_days": 1,
+                "id": "o0000",
+                "price": 4200,
+                "round": 0,
+                "source": "listing",
+                "status": "superseded",
+                "warranty_days": 0
+              },
+              "o0001": {
+                "id": "o0001",
+                "actor": "buyer",
+                "price": 3900,
+                "status": "superseded",
+                "round": 1,
+                "source": "offer",
+                "delivery_days": 1,
+                "warranty_days": 30
+              },
+              "o0002": {
+                "id": "o0002",
+                "actor": "seller",
+                "price": 4100,
+                "status": "superseded",
+                "round": 1,
+                "source": "offer",
+                "delivery_days": 1,
+                "warranty_days": 0
+              },
+              "o0003": {
+                "id": "o0003",
+                "actor": "buyer",
+                "price": 3950,
+                "status": "superseded",
+                "round": 2,
+                "source": "offer",
+                "delivery_days": 1,
+                "warranty_days": 30
+              },
+              "o0004": {
+                "id": "o0004",
+                "actor": "seller",
+                "price": 4050,
+                "status": "active",
+                "round": 2,
+                "source": "offer",
+                "delivery_days": 1,
+                "warranty_days": 0
+              }
+            },
+            "rounds": 2,
+            "scenario_id": "fictional-phone-v2-urgent",
+            "status": "negotiating",
+            "termination_reason": null,
+            "turns_taken": 4
+          }
+        }
+      }
+    }
+  ],
+  "summary": []
+}

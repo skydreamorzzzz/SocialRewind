@@ -25,6 +25,26 @@ class _Refusal(Exception):
 
 
 @dataclass(frozen=True)
+class ContractPreferences:
+    """buyer: value-price-delay*(d-1)+warranty*w；seller: price-value+delay*(d-1)-warranty*w。"""
+
+    value: int
+    delay: int
+    warranty: int
+
+
+@dataclass(frozen=True)
+class ContractConfig:
+    buyer: ContractPreferences
+    seller: ContractPreferences
+    price_min: int = 3000
+    price_max: int = 4500
+    price_step: int = 50
+    delivery_days: tuple[int, ...] = (1, 3, 7)
+    warranty_days: tuple[int, ...] = (0, 30, 90)
+
+
+@dataclass(frozen=True)
 class TradeScenario:
     scenario_id: str
     title: str
@@ -35,6 +55,7 @@ class TradeScenario:
     seller_min_price: int
     max_rounds: int = 20
     gamma: float = 0.99
+    contract: ContractConfig | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +67,7 @@ class TradeMemory:
     visible_events: tuple[dict[str, Any], ...]
     outcome: dict[str, Any]
     own_private_fact: str
+    previous_lives: tuple[dict[str, Any], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
@@ -68,6 +90,35 @@ def fictional_phone_trade(max_rounds: int = 20) -> TradeScenario:
         seller_min_price=3300,
         max_rounds=max_rounds,
     )
+
+
+def multidimensional_trade(profile: str = "urgent", max_rounds: int = 20) -> TradeScenario:
+    """自行构造的两组私人偏好；不是 AgenticPay 原始数据。"""
+    profiles = {
+        "urgent": (ContractPreferences(3900, 70, 3), ContractPreferences(3300, 20, 1)),
+        "warranty": (ContractPreferences(3700, 5, 6), ContractPreferences(3300, 20, 2)),
+    }
+    if profile not in profiles:
+        raise ValueError(f"未知偏好配置: {profile}")
+    buyer, seller = profiles[profile]
+    return TradeScenario(
+        scenario_id=f"fictional-phone-v2-{profile}", title=f"虚构三维合同：{profile}",
+        fictional=True, product=fictional_phone_trade().product, listed_price=4200,
+        buyer_max_price=buyer.value, seller_min_price=seller.value, max_rounds=max_rounds,
+        contract=ContractConfig(buyer, seller),
+    )
+
+
+def scenario_from_dict(value: dict[str, Any]) -> TradeScenario:
+    data = copy.deepcopy(value)
+    if data.get("contract") is not None:
+        contract = data["contract"]
+        contract["buyer"] = ContractPreferences(**contract["buyer"])
+        contract["seller"] = ContractPreferences(**contract["seller"])
+        contract["delivery_days"] = tuple(contract["delivery_days"])
+        contract["warranty_days"] = tuple(contract["warranty_days"])
+        data["contract"] = ContractConfig(**contract)
+    return TradeScenario(**data)
 
 
 def _canonical(value: Any) -> Any:
@@ -102,6 +153,15 @@ class TradeWorld:
         initial = self._make_s0(scenario)
         self._s0_json = json.dumps(initial, ensure_ascii=False, sort_keys=True)
         self._state: dict[str, Any] = json.loads(self._s0_json)
+        self._feasible_utilities: list[tuple[int, int]] = []
+        if scenario.contract is not None:
+            c = scenario.contract
+            for p in range(c.price_min, c.price_max + 1, c.price_step):
+                for d in c.delivery_days:
+                    for w in c.warranty_days:
+                        pair = (self._utility("buyer", p, d, w), self._utility("seller", p, d, w))
+                        if min(pair) >= 0:
+                            self._feasible_utilities.append(pair)
         self._events: list[dict[str, Any]] = []
         self._timeline_id = 1
         self._assert_invariants(self._state)
@@ -113,11 +173,11 @@ class TradeWorld:
         prices = (scenario.listed_price, scenario.buyer_max_price, scenario.seller_min_price)
         if any(isinstance(price, bool) or not isinstance(price, int) or price <= 0 for price in prices):
             raise ValueError("所有价格必须是正整数")
-        if scenario.listed_price < scenario.seller_min_price:
+        if scenario.contract is None and scenario.listed_price < scenario.seller_min_price:
             raise ValueError("挂牌价不得低于卖方最低接受价")
-        if scenario.buyer_max_price <= scenario.seller_min_price:
+        if scenario.contract is None and scenario.buyer_max_price <= scenario.seller_min_price:
             raise ValueError("质量指标要求买方最高价严格高于卖方最低价")
-        if isinstance(scenario.max_rounds, bool) or not 1 <= scenario.max_rounds <= 20:
+        if type(scenario.max_rounds) is not int or not 1 <= scenario.max_rounds <= 20:
             raise ValueError("max_rounds 必须在 1 到 20 之间")
         if (
             isinstance(scenario.gamma, bool)
@@ -125,6 +185,31 @@ class TradeWorld:
             or not 0 < scenario.gamma <= 1
         ):
             raise ValueError("gamma 必须在 (0, 1] 范围内")
+        c = scenario.contract
+        if c is not None:
+            numbers = (c.price_min, c.price_max, c.price_step, *c.delivery_days, *c.warranty_days,
+                       c.buyer.value, c.buyer.delay, c.buyer.warranty,
+                       c.seller.value, c.seller.delay, c.seller.warranty)
+            if any(type(n) is not int or n < 0 for n in numbers):
+                raise ValueError("合同范围与偏好必须是非负整数")
+            if not 0 < c.price_min <= c.price_max or c.price_step <= 0:
+                raise ValueError("合同价格区间和步长无效")
+            if (c.price_max - c.price_min) % c.price_step:
+                raise ValueError("价格区间必须可被步长整除")
+            if (not c.delivery_days or not c.warranty_days or min(c.delivery_days) < 1
+                    or len(set(c.delivery_days)) != len(c.delivery_days)
+                    or len(set(c.warranty_days)) != len(c.warranty_days)):
+                raise ValueError("交付/保障选项必须非空、不重复，交付至少一天")
+            count = (1 + (c.price_max - c.price_min) // c.price_step) * len(c.delivery_days) * len(c.warranty_days)
+            if count > 10000:
+                raise ValueError("MVP 合同空间最多 10000 个组合")
+            if not c.price_min <= scenario.listed_price <= c.price_max or (scenario.listed_price - c.price_min) % c.price_step:
+                raise ValueError("挂牌价必须在合同价格网格内")
+            listing_utility = (scenario.listed_price - c.seller.value
+                               + c.seller.delay * (c.delivery_days[0] - 1)
+                               - c.seller.warranty * c.warranty_days[0])
+            if listing_utility < 0:
+                raise ValueError("挂牌合同必须满足卖方非负效用")
 
     @staticmethod
     def _make_s0(scenario: TradeScenario) -> dict[str, Any]:
@@ -136,7 +221,7 @@ class TradeWorld:
             "round": 0,
             "source": "listing",
         }
-        return {
+        state = {
             "scenario_id": scenario.scenario_id,
             "status": "negotiating",
             "termination_reason": None,
@@ -148,6 +233,26 @@ class TradeWorld:
             "active_offer_id": "o0000",
             "deal_price": None,
         }
+        if scenario.contract is not None:
+            state["contract_config"] = _canonical(asdict(scenario.contract))
+            state["deal_terms"] = None
+            listing["delivery_days"] = scenario.contract.delivery_days[0]
+            listing["warranty_days"] = scenario.contract.warranty_days[0]
+        return state
+
+    def _utility(self, role: str, price: int, delivery_days: int, warranty_days: int) -> int:
+        if role not in ROLES or self._scenario.contract is None:
+            raise ValueError("utility 仅用于三维合同的 buyer/seller")
+        pref = getattr(self._scenario.contract, role)
+        value = pref.value - price - pref.delay * (delivery_days - 1) + pref.warranty * warranty_days
+        return value if role == "buyer" else -value
+
+    def contract_rules(self) -> dict[str, Any] | None:
+        c = self._scenario.contract
+        if c is None:
+            return None
+        return {"price_min": c.price_min, "price_max": c.price_max, "price_step": c.price_step,
+                "delivery_days": list(c.delivery_days), "warranty_days": list(c.warranty_days)}
 
     @property
     def s0_fingerprint(self) -> str:
@@ -178,6 +283,32 @@ class TradeWorld:
             if viewer == "buyer"
             else {"minimum_price": self._scenario.seller_min_price}
         )
+        if self._scenario.contract is not None:
+            own_value = {"preferences": asdict(getattr(self._scenario.contract, viewer)),
+                         "utility_formula": ("value-price-delay*(delivery_days-1)+warranty*warranty_days"
+                                             if viewer == "buyer" else
+                                             "price-value+delay*(delivery_days-1)-warranty*warranty_days")}
+            # 仅展开角色已知的自身效用，不推荐策略，不使用对手偏好。
+            c = self._scenario.contract
+            pref = getattr(c, viewer)
+            limits = []
+            for d in c.delivery_days:
+                for w in c.warranty_days:
+                    bound = pref.value - pref.delay * (d - 1) + pref.warranty * w
+                    if viewer == "buyer":
+                        price_limit = min(c.price_max, c.price_min + (bound - c.price_min) // c.price_step * c.price_step)
+                        available = price_limit >= c.price_min
+                    else:
+                        grid_steps = (bound - c.price_min + c.price_step - 1) // c.price_step
+                        price_limit = max(c.price_min, c.price_min + grid_steps * c.price_step)
+                        available = price_limit <= c.price_max
+                    limits.append({"delivery_days": d, "warranty_days": w,
+                                   "maximum_price" if viewer == "buyer" else "minimum_price": price_limit if available else None})
+            own_value["price_limits_by_terms"] = limits
+            active = self._active_offer_public()
+            own_value["active_offer_utility"] = (
+                self._utility(viewer, **{k: active[k] for k in ("price", "delivery_days", "warranty_days")})
+                if active else None)
         return {
             "scenario_id": self._scenario.scenario_id,
             "fictional": True,
@@ -186,6 +317,7 @@ class TradeWorld:
             "listed_price": self._scenario.listed_price,
             "max_rounds": self._scenario.max_rounds,
             "private": own_value,
+            **({"contract_rules": self.contract_rules()} if self._scenario.contract else {}),
             "status": self._state["status"],
             "termination_reason": self._state["termination_reason"],
             "current_round": self._current_round(),
@@ -199,10 +331,13 @@ class TradeWorld:
 
     def scenario_context(self, role: str) -> dict[str, Any]:
         observation = self.observe(role)
-        return {
+        context = {
             key: observation[key]
             for key in ("fictional", "role", "product", "listed_price", "max_rounds", "private")
         }
+        if self._scenario.contract is not None:
+            context["contract_rules"] = self.contract_rules()
+        return context
 
     def _current_round(self) -> int:
         if self._state["status"] != "negotiating":
@@ -213,7 +348,8 @@ class TradeWorld:
     def _offer_public(offer: dict[str, Any]) -> dict[str, Any]:
         return {
             key: offer[key]
-            for key in ("id", "actor", "price", "status", "round", "source")
+            for key in ("id", "actor", "price", "status", "round", "source", "delivery_days", "warranty_days")
+            if key in offer
         }
 
     def _active_offer_public(self) -> dict[str, Any] | None:
@@ -236,6 +372,19 @@ class TradeWorld:
             "rounds": rounds,
             "efficiency_discount": round(discount, 8),
         }
+        if self._scenario.contract is not None:
+            terms = self._state["deal_terms"]
+            public["deal_terms"] = copy.deepcopy(terms)
+            bu = self._utility("buyer", **terms) if deal else 0
+            su = self._utility("seller", **terms) if deal else 0
+            if viewer in ROLES:
+                return {**public, "own_utility": bu if viewer == "buyer" else su}
+            dominated = any(b >= bu and s >= su and (b > bu or s > su)
+                            for b, s in self._feasible_utilities)
+            max_welfare = max((b + s for b, s in self._feasible_utilities), default=0)
+            return {**public, "buyer_utility": bu, "seller_utility": su,
+                    "social_welfare": bu + su, "pareto_efficient": not dominated,
+                    "nash_quality": round(4 * bu * su / max_welfare**2, 8) if max_welfare else 0.0}
         if deal:
             buyer_utility = self._scenario.buyer_max_price - price
             seller_utility = price - self._scenario.seller_min_price
@@ -358,12 +507,18 @@ class TradeWorld:
             self._require_text(action.payload["text"])
             return {"delivered": True}
         if action.kind == "offer":
-            self._exact_keys(action.payload, {"text", "price"})
+            expected = {"text", "price"}
+            if self._scenario.contract is not None:
+                expected |= {"delivery_days", "warranty_days"}
+            self._exact_keys(action.payload, expected)
             self._require_text(action.payload["text"])
             price = self._require_price(action.payload["price"])
-            if action.actor == "buyer" and price > self._scenario.buyer_max_price:
+            if self._scenario.contract is not None:
+                self._validate_terms(action.payload)
+                self._validate_own_utility(action.actor, action.payload)
+            elif action.actor == "buyer" and price > self._scenario.buyer_max_price:
                 raise _Refusal("buyer_limit_exceeded", "买方报价超过私人最高愿付价")
-            if action.actor == "seller" and price < self._scenario.seller_min_price:
+            elif action.actor == "seller" and price < self._scenario.seller_min_price:
                 raise _Refusal("seller_limit_breached", "卖方报价低于私人最低接受价")
             current_id = state["active_offer_id"]
             if current_id is not None:
@@ -378,8 +533,12 @@ class TradeWorld:
                 "round": self._current_round(),
                 "source": "offer",
             }
+            if self._scenario.contract is not None:
+                state["offers"][offer_id].update({k: action.payload[k] for k in ("delivery_days", "warranty_days")})
             state["active_offer_id"] = offer_id
-            return {"offer_id": offer_id, "price": price, "status": "active"}
+            return {"offer_id": offer_id, "price": price, "status": "active",
+                    **({k: action.payload[k] for k in ("delivery_days", "warranty_days")}
+                       if self._scenario.contract else {})}
         if action.kind in ("accept", "reject"):
             self._exact_keys(action.payload, {"text", "offer_id"})
             self._require_text(action.payload["text"])
@@ -388,16 +547,21 @@ class TradeWorld:
                 offer["status"] = "rejected"
                 state["active_offer_id"] = None
                 return {"offer_id": offer["id"], "status": "rejected"}
-            if action.actor == "buyer" and offer["price"] > self._scenario.buyer_max_price:
+            if self._scenario.contract is not None:
+                self._validate_own_utility(action.actor, offer)
+            elif action.actor == "buyer" and offer["price"] > self._scenario.buyer_max_price:
                 raise _Refusal("buyer_limit_exceeded", "买方不能接受超过最高愿付价的报价")
-            if action.actor == "seller" and offer["price"] < self._scenario.seller_min_price:
+            elif action.actor == "seller" and offer["price"] < self._scenario.seller_min_price:
                 raise _Refusal("seller_limit_breached", "卖方不能接受低于最低接受价的报价")
             offer["status"] = "accepted"
             state["status"] = "deal"
             state["termination_reason"] = "explicit_acceptance"
             state["deal_price"] = offer["price"]
+            if self._scenario.contract is not None:
+                state["deal_terms"] = {k: offer[k] for k in ("price", "delivery_days", "warranty_days")}
             state["active_offer_id"] = None
-            return {"offer_id": offer["id"], "status": "deal", "deal_price": offer["price"]}
+            return {"offer_id": offer["id"], "status": "deal", "deal_price": offer["price"],
+                    **({"deal_terms": copy.deepcopy(state["deal_terms"])} if self._scenario.contract else {})}
         if action.kind == "exit":
             self._exact_keys(action.payload, {"text"})
             self._require_text(action.payload["text"])
@@ -432,8 +596,21 @@ class TradeWorld:
 
     @staticmethod
     def _result_summary(result: dict[str, Any]) -> dict[str, Any]:
-        allowed = ("delivered", "offer_id", "price", "status", "deal_price", "by", "rounds")
+        allowed = ("delivered", "offer_id", "price", "status", "deal_price", "by", "rounds",
+                   "delivery_days", "warranty_days", "deal_terms")
         return {key: copy.deepcopy(result[key]) for key in allowed if key in result}
+
+    def _validate_terms(self, terms: dict[str, Any]) -> None:
+        c = self._scenario.contract
+        p, d, w = (terms[k] for k in ("price", "delivery_days", "warranty_days"))
+        if (type(p) is not int or not c.price_min <= p <= c.price_max
+                or (p - c.price_min) % c.price_step or type(d) is not int
+                or d not in c.delivery_days or type(w) is not int or w not in c.warranty_days):
+            raise _Refusal("invalid_contract", "条款必须符合公开合同网格")
+
+    def _validate_own_utility(self, role: str, terms: dict[str, Any]) -> None:
+        if self._utility(role, **{k: terms[k] for k in ("price", "delivery_days", "warranty_days")}) < 0:
+            raise _Refusal("negative_own_utility", "正式报价和接受不得使自身收益低于退出收益 0")
 
     @staticmethod
     def _require_text(value: object) -> str:
@@ -573,11 +750,15 @@ class TradeWorld:
             if role == "buyer"
             else f"我的最低接受价是 {self._scenario.seller_min_price} 元。"
         )
+        if self._scenario.contract is not None:
+            own_fact = json.dumps(self.observe(role)["private"], ensure_ascii=False, sort_keys=True)
         role_metrics = self.metrics(role)
         outcome = {
             key: role_metrics[key]
             for key in ("status", "deal", "deal_price", "rounds", "own_utility")
         }
+        if self._scenario.contract is not None:
+            outcome["deal_terms"] = copy.deepcopy(role_metrics["deal_terms"])
         return TradeMemory(
             role=role,
             source_timeline_id=self._timeline_id,
@@ -635,7 +816,14 @@ class TradeWorld:
             raise AssertionError("终止状态不可继续行动")
         if state["status"] == "deal":
             price = state["deal_price"]
-            if not self._scenario.seller_min_price <= price <= self._scenario.buyer_max_price:
+            if self._scenario.contract is not None:
+                terms = state["deal_terms"]
+                self._validate_terms(terms)
+                if terms["price"] != price or any(self._utility(r, **terms) < 0 for r in ROLES):
+                    raise AssertionError("合同必须与成交价一致，且满足双方个体理性")
+            elif not self._scenario.seller_min_price <= price <= self._scenario.buyer_max_price:
                 raise AssertionError("成交价格违反双方硬约束")
         elif state["deal_price"] is not None:
             raise AssertionError("未成交状态不可出现成交价")
+        if self._scenario.contract is not None and state["status"] != "deal" and state["deal_terms"] is not None:
+            raise AssertionError("未成交状态不可出现合同")
