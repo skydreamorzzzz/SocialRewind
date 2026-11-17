@@ -4,18 +4,34 @@
 
 两个 LLM Agent 在同一初始世界 S₀ 中自由谈判，经历重置后，探索各自保留的经历如何影响下一世选择。世界负责客观规则、信息权限和收益，Agent 自主沟通、交换条件、接受或退出。没有最低谈判轮数，也不要求轮回后一定改进。
 
-## v3：以完整谈判为节点的社会策略树
+## v3.1：主动检验假设与双方收益
+
+保持 v3 的手机、角色卡、效用和搜索结构，仅更新 Prompt 与搜索评价。Exploration 要从本人历史提出可检验假设，在适当的第一个机会主动试探，再依据反馈决定成交、调整或退出；Exploitation 仍可直接利用成功经验。双方利益冲突更明确，也保留让步与条件交换空间，不强制报价、首句话或最低轮数。
+
+新搜索奖励为 `sqrt(max(0, Buyer Utility) * max(0, Seller Utility)) / 500`，用于 UCB 回传和最佳节点排序；0/960 的独占收益记0。Social Welfare 与 Best-observed Welfare 继续保留，另列 Best-observed Nash Reward，研究者评分不进入 Agent 输入。新日志标记 `prompt_version=v3.1`、`reward_version=nash-v1`；无标记旧日志按原规则回放，新旧版本不能混合统计。
+
+```powershell
+python -m social_rewind.strategy_tree --nodes 2
+Invoke-Item runs/v31.html
+# 预先设置 DEEPSEEK_API_KEY；一次最小真实对照，最多7场，非5次正式批次
+python -m social_rewind.strategy_tree --live --nodes 2 --api-base https://api.deepseek.com --model deepseek-flash --api-key-env DEEPSEEK_API_KEY --disable-thinking --temperature 0.3 --log runs/v31.json --html runs/v31.html
+python -m social_rewind.strategy_tree --replay examples/v31_pilot.json --html runs/v31_replayed.html
+```
+
+91项离线测试通过，包括旧 v3 回放、Nash排序和信息隔离。唯一一次最小真实试运行共7场、55次调用、312409 tokens。两条Exploration分支均实际试探：一条改成交付条件，另一条测试90天保障后回到旧合同。福利840→960的方案因买方收益下降，Nash反从0.626降到0.587，未被选为最佳。详见 [v3.1 实验记录](EXPERIMENT_V31.md) 与 [真实页面](examples/v31_pilot.html)；这只是机制检查，原 v3 日志与结论保留如下。
+
+## v3：以完整谈判为节点的社会策略树（历史版本）
 
 v3 为同一虚构手机增加独立冻结的二维效用表，让交付与保障产生非线性收益。保留全部 v2 入口、配置和结论；不同场景之间不作搜索效果的归因比较。双方只见自己的偏好和祖先路径经历，分别提出私人策略假设，再自主谈判。研究者侧根据实际福利分配搜索预算，不向 Agent 提供联合奖励、对手参数或最优合同。
 
 ```powershell
 # Python 3.11+，纯标准库；离线只验证机制
-python -m social_rewind.strategy_tree
+python -m social_rewind.strategy_tree --version v3 --log runs/v3.json --html runs/v3.html
 Invoke-Item runs/v3.html
 python -m unittest discover -s tests -v
 
 # 真实实验；预先设置 DEEPSEEK_API_KEY，不会回退到脚本
-python -m social_rewind.strategy_tree --live --api-base https://api.deepseek.com --model deepseek-flash --api-key-env DEEPSEEK_API_KEY --disable-thinking --repeats 5 --log runs/v3.json --html runs/v3.html
+python -m social_rewind.strategy_tree --version v3 --live --api-base https://api.deepseek.com --model deepseek-flash --api-key-env DEEPSEEK_API_KEY --disable-thinking --repeats 5 --log runs/v3.json --html runs/v3.html
 # 不联网，复算所有节点、路径权限、选择/回传和统计，重新生成页面
 python -m social_rewind.strategy_tree --replay runs/v3.json --html runs/v3_replayed.html
 ```

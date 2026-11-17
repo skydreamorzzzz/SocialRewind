@@ -15,7 +15,7 @@ from test_phone_case import PhoneClient
 from social_rewind.llm import ModelCallError, OpenAICompatibleClient, OpenAICompatibleConfig
 from social_rewind.models import Action, DecisionNote
 from social_rewind.scenario_v3 import strategy_scenario
-from social_rewind.strategy_tree import METHODS, MODES, PLAN_KEYS, SearchConfig, StrategyTree, batch_statistics, run_v3, verify_v3
+from social_rewind.strategy_tree import METHODS, MODES, PLAN_KEYS, WELFARE_REWARD, SearchConfig, StrategyTree, batch_statistics, run_v3, verify_v3
 from social_rewind.trade import AUDITOR, TradeWorld, phone_negotiation, scenario_from_dict
 
 
@@ -75,8 +75,9 @@ class V3WorldTests(unittest.TestCase):
 
 
 class TreeAlgorithmTests(unittest.TestCase):
+    # 保留原v3的福利奖励断言；v3.1默认Nash及其选择在test_strategy_v31覆盖。
     def make_two(self, first, second):
-        tree = StrategyTree("guided", SearchConfig(), synthetic())
+        tree = StrategyTree("guided", SearchConfig(), synthetic(), reward_version=WELFARE_REWARD)
         for score in (first, second):
             node = tree.add(tree.select())
             tree.finish(node.node_id, synthetic(score))
@@ -93,7 +94,7 @@ class TreeAlgorithmTests(unittest.TestCase):
 
     def test_backprop_and_budget_depth_limits(self):
         for method in METHODS:
-            tree = StrategyTree(method, SearchConfig(), synthetic(960))
+            tree = StrategyTree(method, SearchConfig(), synthetic(960), reward_version=WELFARE_REWARD)
             while (selection := tree.select()) is not None:
                 node = tree.add(selection)
                 tree.finish(node.node_id, synthetic(960))
@@ -111,7 +112,7 @@ class TreeAlgorithmTests(unittest.TestCase):
     def test_ties_are_seeded_and_failures_do_not_fabricate_samples(self):
         a, b = self.make_two(840, 840), self.make_two(840, 840)
         self.assertEqual(a.select(), b.select())
-        tree = StrategyTree("guided", SearchConfig(), synthetic(840))
+        tree = StrategyTree("guided", SearchConfig(), synthetic(840), reward_version=WELFARE_REWARD)
         for _ in range(2):
             child = tree.add(tree.select())
             tree.finish(child.node_id, synthetic(status="failed"))

@@ -205,6 +205,29 @@ def validate_summary(summary: dict[str, Any], memory: TradeMemory) -> None:
         raise ValueError("个人总结只能标记为角色自述或离线测试")
 
 
+LEGACY_STRATEGY_PROMPT = "v3"
+STRATEGY_PROMPT = "v3.1"
+
+
+def strategy_mode_instruction(mode: str, prompt_version: str) -> str:
+    if mode not in ("exploitation", "exploration") or prompt_version not in (LEGACY_STRATEGY_PROMPT, STRATEGY_PROMPT):
+        raise ValueError("未知策略模式或Prompt版本")
+    if prompt_version == LEGACY_STRATEGY_PROMPT:
+        return ("利用已有经验提出有依据的可调整方案；不要把一次成功直接视为最优。" if mode == "exploitation" else
+                "从本人历史中找出尚未验证的判断，提出一个有具体观察意义的新尝试；不要求一定不同或成功。")
+    if mode == "exploitation":
+        return ("【Exploitation：利用已有经验】目标是利用已有信息争取更好的个人交易结果。"
+                "考虑已知合同为什么成功、对方真正透露了什么、哪些只是自己的主观猜测，以及继续谈判是否值得承担风险。"
+                "可以沿用成功经验、小幅调整，也可以直接成交，不要求刻意改变合同。")
+    return ("【Exploration：验证未知假设】你参与允许世界重启的策略探索实验，任务不只是安全成交。"
+            "从本人授权历史识别一个具体不确定性，提出能被对方公开回应支持或削弱的假设。"
+            "选择不同于路径上已有行动方式的针对性试探，在本世第一个适当机会主动实施至少一次，"
+            "可以是询问、信息披露、条件交换或正式报价，不预设具体话术、价格或轮数。"
+            "观察回应后自主决定继续探索、调整、成交或退出；不要把前世成功合同默认当作最优。"
+            "探索允许失败，也允许完成有意义的尝试后回到旧方案；避免计划提出探索、实际未经试探就重复旧合同。"
+            "不要故意提出非法合同、无意义报价或重复问题。计划不能凌驾于合理个人利益和世界规则。")
+
+
 class LLMNegotiationAgent:
     def __init__(
         self,
@@ -224,6 +247,9 @@ class LLMNegotiationAgent:
             raise ValueError("未知谈判角色")
         if memory is not None and memory.role != role:
             raise PermissionError("不能向角色注入其他人的轮回记忆")
+        prompt_version = context.get("prompt_version", LEGACY_STRATEGY_PROMPT)
+        if prompt_version not in (LEGACY_STRATEGY_PROMPT, STRATEGY_PROMPT):
+            raise ValueError("未知谈判Prompt版本")
         counterpart = "seller" if role == "buyer" else "buyer"
         private_rule = (
             "你的私人效用定义：" + json.dumps(context["private"], ensure_ascii=False, sort_keys=True)
@@ -243,10 +269,20 @@ class LLMNegotiationAgent:
             rebirth = context["shared_reset_frame"] + "\n【本人授权记忆数据】\n" + json.dumps(
                 memory.to_dict() if memory is not None else None, ensure_ascii=False, sort_keys=True)
         if "strategy_reference" in context:
-            rebirth = ("【v3 路径重启】世界恢复同一初始条件。以下仅为你自己的授权路径历史、个人总结与私人策略计划。"
-                       "对方有自己的路径记忆与计划，但你不能读取其私人内容。计划只是参考，允许偏离、重复或放弃；"
-                       "不能把旧事件编号当成本世证据。\n【本人策略参考】\n"
-                       + json.dumps(context["strategy_reference"], ensure_ascii=False, sort_keys=True))
+            frame = ("【v3 路径重启】世界恢复同一初始条件。以下仅为你自己的授权路径历史、个人总结与私人策略计划。"
+                     "对方有自己的路径记忆与计划，但你不能读取其私人内容。计划只是参考，允许偏离、重复或放弃；"
+                     "不能把旧事件编号当成本世证据。\n【本人策略参考】\n")
+            if prompt_version == STRATEGY_PROMPT:
+                frame = ("【v3.1 路径重启】世界恢复同一初始条件。以下仅为你自己的授权路径历史、个人总结与私人策略计划。"
+                         "对方有自己的路径记忆与计划，但你不能读取其私人内容。认真参考本人计划，"
+                         "可基于实时反馈、合理个人利益和规则调整。不能把旧事件编号当成本世证据。\n【本人策略参考】\n")
+            rebirth = frame + json.dumps(context["strategy_reference"], ensure_ascii=False, sort_keys=True)
+            if prompt_version == STRATEGY_PROMPT:
+                mode = context["strategy_reference"]["private_plan"]["branch_mode"]
+                rebirth += "\n【v3.1分支目标】\n" + strategy_mode_instruction(mode, prompt_version)
+                rebirth += ("\n认真参考并尝试落实本人计划，可根据实时反馈和个人利益调整。"
+                            "Exploration中第一次正式接受与历史相同的合同时，先自查是否已做过有意义的假设检验，"
+                            "可以在现有简短决策说明中记录尝试或调整依据；不需要隐藏推理链或额外输出字段。")
         schema = """每次只输出一个 JSON 对象，禁止 Markdown：
 {
   "decision": {
@@ -266,11 +302,34 @@ class LLMNegotiationAgent:
             private_rule += ("\n交付时间指协议达成后天数；保障指售后保障天数。你可以自由询问、沟通、交换条件、"
                              "用新的完整 offer 修改方案、接受、拒绝或退出。双方轮流发言，最多两次行动算一轮；"
                              "消息也占一次行动。新报价取代旧报价。不要求按固定步骤或必须成交。")
-            private_rule += ("\n私人效用下限只是合法性的底线，不是你的理想目标。接受前请自主权衡："
-                             "当前方案离你的理想目标有多远、继续沟通或交换合同条件可能带来什么收益，"
-                             "以及对方拒绝、退出或超时使你得到0收益的风险。正收益本身不等于应该立即接受。"
-                             "你可以主动询问、解释，选择披露或保留私人需求；也可以立即成交。"
-                             "没有最低谈判轮数，没有必须遵循的谈判流程，不要求一定改变策略或达成协议。")
+            if prompt_version == LEGACY_STRATEGY_PROMPT:
+                private_rule += ("\n私人效用下限只是合法性的底线，不是你的理想目标。接受前请自主权衡："
+                                 "当前方案离你的理想目标有多远、继续沟通或交换合同条件可能带来什么收益，"
+                                 "以及对方拒绝、退出或超时使你得到0收益的风险。正收益本身不等于应该立即接受。"
+                                 "你可以主动询问、解释，选择披露或保留私人需求；也可以立即成交。"
+                                 "没有最低谈判轮数，没有必须遵循的谈判流程，不要求一定改变策略或达成协议。")
+            else:
+                private_rule += ("\n私人效用下限是合法底线，不是理想目标。接受前权衡个人收益、继续沟通可能带来的利益，"
+                                 "以及拒绝、退出和超时的风险；正收益本身不等于应立即接受。"
+                                 "可以询问、解释、主动披露或保留需求，没有最低轮数、固定流程或必须成交的要求。")
+            if prompt_version == STRATEGY_PROMPT:
+                own_conflict = (
+                    "主力手机故障影响工作，希望尽快得到可靠设备；1天交付更理想，3天会造成不便，"
+                    "但在价格或保障合理时可以接受。担心隐藏故障，重视30天保障；"
+                    "不要为了尽快成交轻易放弃价格与保障诉求。"
+                    if role == "buyer" else
+                    "希望回收更多资金，需要时间迁移数据并检测设备，3天交付较合适；"
+                    "1天加急有真实成本，但其他条件合理也可考虑。不要承担不合理的长期售后责任，"
+                    "可以用准备时间降低30天保障成本。"
+                )
+                private_rule += ("\n【v3.1本人利益与协商空间】" + own_conflict
+                                 + "思考自己最看重什么、哪些可以让步、对方可能最在意什么，"
+                                 "尝试用自己不太在意的条件交换对方看重的条件；推测不冒充已知事实。"
+                                 "不必绝不让步，也不要仅因冲突提高退出概率。"
+                                 "不编造未建模的硬性截止日期、外部报价或额外履约承诺。")
+        efficiency = ("请有效利用谈判机会，避免无意义重复；效率包括完成必要的假设检验，"
+                      "不要用最快成交取代Exploration的尝试。" if prompt_version == STRATEGY_PROMPT else
+                      "请有效率地谈判，不要为了拖延而重复同一句话。")
         system = f"""你是虚构二手交易中的 {role}，对方是 {counterpart}。请自主、诚实地进行合同谈判，可试探、拒绝、退出或成交，但不要暴露隐藏推理链。
 
 公开商品：{json.dumps(context['product'], ensure_ascii=False, sort_keys=True)}
@@ -280,7 +339,7 @@ class LLMNegotiationAgent:
 {rebirth}
 
 {schema}
-请有效率地谈判，不要为了拖延而重复同一句话。"""
+{efficiency}"""
         self._role = role
         self._messages = [{"role": "system", "content": system}]
 
@@ -432,6 +491,7 @@ class NegotiationRunner:
         session_context: str | None = None,
         shared_reset_frame: str | None = None,
         private_contexts: dict[str, dict[str, Any]] | None = None,
+        prompt_version: str | None = None,
         on_turn: Callable[[str, AgentTurn, dict[str, Any]], None] | None = None,
     ) -> NegotiationRun:
         memory_map = memories or {}
@@ -451,6 +511,8 @@ class NegotiationRunner:
                 context["shared_reset_frame"] = shared_reset_frame
             if private_contexts is not None:
                 context["strategy_reference"] = copy.deepcopy(private_contexts[role])
+            if prompt_version is not None:
+                context["prompt_version"] = prompt_version
             agent.start(role, context, memory)
 
         calls: list[dict[str, Any]] = []

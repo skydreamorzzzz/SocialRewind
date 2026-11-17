@@ -18,7 +18,7 @@ from typing import Any, Callable
 
 from .evaluation import descriptive, paired_statistics
 from .llm import ModelCallError, OpenAICompatibleClient, OpenAICompatibleConfig
-from .negotiation import AgentOutputError, AgentTurn, IllegalAgentAction, LLMNegotiationAgent, NegotiationRunner, ScriptedAgent, summarize_experience, validate_summary
+from .negotiation import AgentOutputError, AgentTurn, IllegalAgentAction, LEGACY_STRATEGY_PROMPT, LLMNegotiationAgent, NegotiationRunner, STRATEGY_PROMPT, ScriptedAgent, strategy_mode_instruction, summarize_experience, validate_summary
 from .scenario_v3 import strategy_scenario
 from .trade import AUDITOR, ROLES, TradeWorld, scenario_from_dict
 
@@ -26,6 +26,23 @@ from .trade import AUDITOR, ROLES, TradeWorld, scenario_from_dict
 MODES = ("exploitation", "exploration")
 METHODS = ("linear", "random", "guided")
 PLAN_KEYS = {"evidence", "hypothesis", "strategy", "expected_observation", "risk"}
+WELFARE_REWARD = "welfare-v1"
+NASH_REWARD = "nash-v1"
+
+
+def experiment_versions(value: dict[str, Any]) -> tuple[str, str]:
+    pair = (value.get("prompt_version", LEGACY_STRATEGY_PROMPT), value.get("reward_version", WELFARE_REWARD))
+    if pair not in ((LEGACY_STRATEGY_PROMPT, WELFARE_REWARD), (STRATEGY_PROMPT, NASH_REWARD)):
+        raise ValueError("未知或不配套的Prompt/奖励版本")
+    return pair
+
+
+def nash_reward(metrics: dict[str, Any] | None) -> float | None:
+    if metrics is None:
+        return None
+    if not metrics["deal"]:
+        return 0.0
+    return math.sqrt(max(0, metrics["buyer_utility"]) * max(0, metrics["seller_utility"])) / 500
 
 
 @dataclass(frozen=True)
@@ -59,10 +76,13 @@ class SearchNode:
 
 
 class StrategyTree:
-    def __init__(self, method: str, config: SearchConfig, root: dict[str, Any]) -> None:
+    def __init__(self, method: str, config: SearchConfig, root: dict[str, Any], *, reward_version: str = NASH_REWARD) -> None:
         config.validate()
         if method not in METHODS:
             raise ValueError("未知搜索方法")
+        if reward_version not in (WELFARE_REWARD, NASH_REWARD):
+            raise ValueError("未知搜索奖励版本")
+        self.reward_version = reward_version
         self.method, self.config = method, config
         self.rng = random.Random(config.seed)
         self.nodes = {"n0": SearchNode("n0", None, 0, "natural", "root")}
@@ -157,7 +177,12 @@ class StrategyTree:
         node = self.nodes[node_id]
         node.status = record["status"]
         metrics = record.get("metrics")
-        reward = (metrics["social_welfare"] / 1200 if metrics["deal"] else 0.0) if metrics else None
+        if metrics is None:
+            reward = None
+        elif self.reward_version == NASH_REWARD:
+            reward = nash_reward(metrics)
+        else:
+            reward = metrics["social_welfare"] / 1200 if metrics["deal"] else 0.0
         node.reward = reward
         updates = []
         for ancestor in self.path(node_id):
@@ -168,10 +193,16 @@ class StrategyTree:
             updates.append({"node_id": ancestor.node_id, "visits": ancestor.visits,
                             "value_sum": ancestor.value_sum, "attempts": ancestor.attempts})
         self.backprop.append({"node_id": node_id, "reward": reward, "updates": updates})
-        observed = [round(n.reward * 1200, 8) for n in self.nodes.values() if n.reward is not None]
-        self.best_curve.append({"search_index": len(self.best_curve), "node_id": node_id,
-                                "welfare": metrics["social_welfare"] if metrics else None,
-                                "best_observed_welfare": max(observed) if observed else None})
+        observed = [p["welfare"] for p in self.best_curve if p["welfare"] is not None]
+        if metrics is not None:
+            observed.append(metrics["social_welfare"])
+        point = {"search_index": len(self.best_curve), "node_id": node_id,
+                 "welfare": metrics["social_welfare"] if metrics else None,
+                 "best_observed_welfare": max(observed) if observed else None}
+        if self.reward_version == NASH_REWARD:
+            rewards = [n.reward for n in self.nodes.values() if n.reward is not None]
+            point.update(nash_reward=reward, best_observed_nash_reward=max(rewards) if rewards else None)
+        self.best_curve.append(point)
 
     def to_dict(self) -> dict[str, Any]:
         return {"method": self.method, "config": asdict(self.config), "nodes": [asdict(n) for n in self.nodes.values()],
@@ -200,21 +231,29 @@ def validate_plan(value: dict[str, Any]) -> None:
         raise ValueError("计划五段各为1至300字字符串")
 
 
-def propose_plan(client, role: str, mode: str, path: list[dict[str, Any]], context: dict[str, Any]) -> dict[str, Any]:
-    if role not in ROLES or mode not in MODES or any(item["memory"]["role"] != role for item in path):
-        raise PermissionError("策略计划的角色或路径权限错误")
-    if client is None:
-        return {"role": role, "branch_mode": mode, "source": "offline_fixture",
-                **{key: "离线机制测试占位计划，不代表自主策略。" for key in PLAN_KEYS}}
-    instruction = ("利用已有经验提出有依据的可调整方案；不要把一次成功直接视为最优。" if mode == "exploitation" else
-                   "从本人历史中找出尚未验证的判断，提出一个有具体观察意义的新尝试；不要求一定不同或成功。")
-    messages = [{"role": "system", "content": (
+def planning_prompt(role: str, mode: str, prompt_version: str) -> str:
+    instruction = strategy_mode_instruction(mode, prompt_version)
+    if prompt_version == STRATEGY_PROMPT:
+        instruction += ("evidence区分实际观察与主观猜测。hypothesis必须是可被对方回应支持或削弱的具体假设，"
+                        "不能只写争取更好价格。strategy说明用哪类实际行动检验；expected_observation说明观察什么、"
+                        "不同反馈意味着什么；risk考虑被拒绝、关系恶化或失去已知成交机会的成本。")
+    return (
         f"你作为 {role} 准备同一虚构手机交易的下一次重启。本分支类型是 {mode}。{instruction}"
         "仅根据你的角色信息和授权路径生成私人策略计划，对方不能看到。未知对手参数不能冒充事实。"
         "只输出JSON，严格包含 evidence（已有依据）、hypothesis（未验证的假设或目标）、"
         "strategy（本次准备改变或保留的策略方向）、expected_observation（观察什么来判断尝试）、risk（风险）。"
         "五项均为简短字符串，各不超过300字。计划只是可调整参考，不是固定第一句话、强制报价或完整行动序列。"
-        "不要代替对方决策，不需要暴露隐藏推理链。")},
+        "不要代替对方决策，不需要暴露隐藏推理链。")
+
+
+def propose_plan(client, role: str, mode: str, path: list[dict[str, Any]], context: dict[str, Any], *, prompt_version: str = STRATEGY_PROMPT) -> dict[str, Any]:
+    if role not in ROLES or mode not in MODES or any(item["memory"]["role"] != role for item in path):
+        raise PermissionError("策略计划的角色或路径权限错误")
+    system = planning_prompt(role, mode, prompt_version)
+    if client is None:
+        return {"role": role, "branch_mode": mode, "source": "offline_fixture",
+                **{key: "离线机制测试占位计划，不代表自主策略。" for key in PLAN_KEYS}}
+    messages = [{"role": "system", "content": system},
         {"role": "user", "content": json.dumps({"own_context": context, "path_memory": path}, ensure_ascii=False, sort_keys=True)}]
     calls = []
     for attempt in range(2):
@@ -270,7 +309,8 @@ def _offline_agents(index: int) -> tuple[ScriptedAgent, ScriptedAgent]:
 def execute_rollout(record: dict[str, Any], world: TradeWorld, *, live: bool, client,
                     path_memories: dict[str, list[dict[str, Any]]], branch_mode: str,
                     checkpoint: Callable[[], None], validation_contexts: dict[str, Any] | None = None,
-                    make_reflection: bool = True, fixture_index: int = 0) -> None:
+                    make_reflection: bool = True, fixture_index: int = 0,
+                    prompt_version: str = STRATEGY_PROMPT) -> None:
     initial = TradeWorld(strategy_scenario())
     if world.audit_state(AUDITOR) != initial.audit_state(AUDITOR) or any(world.export_events(r) for r in ROLES):
         raise AssertionError("每次完整谈判必须从相同S0与空本世观察开始")
@@ -290,13 +330,13 @@ def execute_rollout(record: dict[str, Any], world: TradeWorld, *, live: bool, cl
         elif branch_mode != "natural":
             for role in ROLES:
                 scoped = _JournalClient(client, record, role, "planning") if live else None
-                record["plans"][role] = propose_plan(scoped, role, branch_mode, path_memories[role], initial.scenario_context(role))
+                record["plans"][role] = propose_plan(scoped, role, branch_mode, path_memories[role], initial.scenario_context(role), prompt_version=prompt_version)
                 save()
             record["private_contexts"] = {r: {"role": r, "path_memory": copy.deepcopy(path_memories[r]), "private_plan": record["plans"][r]} for r in ROLES}
         record["phase"] = "negotiation"
         record["negotiation_started"] = True
         agents = tuple(LLMNegotiationAgent(_JournalClient(client, record, role, "negotiation")) for role in ROLES) if live else _offline_agents(fixture_index)
-        run = NegotiationRunner().run(world, *agents, private_contexts=record["private_contexts"] or None)
+        run = NegotiationRunner().run(world, *agents, private_contexts=record["private_contexts"] or None, prompt_version=prompt_version)
         record.update(metrics=run.metrics, receipts=list(run.receipts), timeline_id=run.timeline_id)
         record["phase"] = "reflection"
         if make_reflection:
@@ -365,9 +405,9 @@ def exploration_metrics(tree: StrategyTree, node: SearchNode, records: dict[str,
 
 
 def choose_winner(tree: StrategyTree, records: dict[str, Any]) -> SearchNode | None:
-    valid = [n for n in tree.nodes.values() if "metrics" in records[n.run_id]]
-    # 同福利时优先有私人计划的最早非根节点；若根严格更好则允许自然策略获胜。
-    return min(valid, key=lambda n: (-records[n.run_id]["metrics"]["social_welfare"], n.parent_id is None, int(n.node_id[1:]))) if valid else None
+    valid = [n for n in tree.nodes.values() if n.reward is not None]
+    # 同奖励时优先有私人计划的最早非根节点；若根严格更好则允许自然策略获胜。
+    return min(valid, key=lambda n: (-n.reward, n.parent_id is None, int(n.node_id[1:]))) if valid else None
 
 
 def method_statistics(tree: StrategyTree, records: dict[str, Any], validation: dict[str, Any] | None) -> dict[str, Any]:
@@ -383,12 +423,21 @@ def method_statistics(tree: StrategyTree, records: dict[str, Any], validation: d
               "additional_search_usage": usage(descendants), "validation_usage": usage([validation] if validation else [])}
     for key in ("buyer_utility", "seller_utility", "social_welfare", "pareto_efficient", "rounds"):
         result[key] = statistics.fmean(m[key] for m in terminal) if terminal else None
+    if tree.reward_version == NASH_REWARD:
+        result.update(nash_reward=statistics.fmean(nash_reward(m) for m in terminal) if terminal else None,
+                      best_observed_nash_reward=tree.best_curve[-1]["best_observed_nash_reward"],
+                      validation_nash_reward=nash_reward(validation.get("metrics")) if validation else None)
     result["exploration"] = {n.node_id: exploration_metrics(tree, n, records) for n in tree.nodes.values() if n.parent_id is not None}
     return result
 
 
 def batch_statistics(repeats: list[dict[str, Any]]) -> dict[str, Any]:
+    versions = {experiment_versions(e) for e in repeats}
+    if len(versions) > 1:
+        raise ValueError("新旧Prompt/奖励版本不能混合统计")
     keys = ("agreement_rate", "buyer_utility", "seller_utility", "social_welfare", "pareto_efficient", "rounds", "best_observed_welfare")
+    if versions == {(STRATEGY_PROMPT, NASH_REWARD)}:
+        keys += ("nash_reward", "best_observed_nash_reward")
     result = {"unit": "独立重复；先汇总每种方法后续尝试，不将节点当成独立样本",
               "eligibility": "search/paired仅含实际启动全部后续谈判预算的方法；all_attempted_search保留未完成预算项。效用均值条件于有效结算，成交率分母为实际启动数。",
               "search": {}, "all_attempted_search": {}, "validation": {}, "paired": {}}
@@ -397,9 +446,9 @@ def batch_statistics(repeats: list[dict[str, Any]]) -> dict[str, Any]:
         for field, eligible in (("all_attempted_search", rows), ("search", [r for r in rows if r.get("statistics", {}).get("budget_complete")])):
             result[field][method] = {key: descriptive([float(r["statistics"][key]) for r in eligible if r.get("statistics", {}).get(key) is not None]) for key in keys}
         validations = [e["runs"].get(e["methods"][method].get("validation_run_id")) for e in repeats if method in e["methods"]]
-        result["validation"][method] = {key: descriptive([float(r["metrics"]["deal" if key == "agreement_rate" else key])
+        result["validation"][method] = {key: descriptive([float(nash_reward(r["metrics"]) if key == "nash_reward" else r["metrics"]["deal" if key == "agreement_rate" else key])
                                                          for r in validations if r and "metrics" in r])
-                                        for key in keys if key != "best_observed_welfare"}
+                                        for key in keys if not key.startswith("best_observed_")}
     for reference in ("linear", "random"):
         result["paired"][f"guided-minus-{reference}"] = {key: paired_statistics([
             float(e["methods"]["guided"]["statistics"][key]) - float(e["methods"][reference]["statistics"][key])
@@ -409,7 +458,9 @@ def batch_statistics(repeats: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def run_v3(*, repeats: int = 1, live: bool = False, client=None, config: SearchConfig | None = None,
-           log_path: Path | None = None, html_path: Path | None = None, repeat_start: int = 1) -> dict[str, Any]:
+           log_path: Path | None = None, html_path: Path | None = None, repeat_start: int = 1,
+           prompt_version: str = STRATEGY_PROMPT, reward_version: str = NASH_REWARD) -> dict[str, Any]:
+    experiment_versions({"prompt_version": prompt_version, "reward_version": reward_version})
     config = config or SearchConfig()
     config.validate()
     if type(repeat_start) is not int or repeat_start < 1 or repeats < 1 or (live and client is None):
@@ -418,6 +469,7 @@ def run_v3(*, repeats: int = 1, live: bool = False, client=None, config: SearchC
     output: dict[str, Any] = {"schema_version": "v3-tree-1", "mode": "live_llm" if live else "offline_fixture",
         "created_utc": datetime.now(timezone.utc).isoformat(), "status": "running", "scenario": asdict(scenario),
         "search_config": asdict(config), "requested_repeats": repeats, "experiments": [],
+        "prompt_version": prompt_version, "reward_version": reward_version,
         "design": "共享一个自然根；每方法最多6次后续尝试；树深3/每节点两种模式；Linear单链深6；独立验证不入搜索奖励",
         "failure_policy": "技术失败保留且消耗尝试预算，无伪造效用；N为完成的谈判估值次数，attempts包含失败"}
     trees: dict[str, StrategyTree] = {}
@@ -456,13 +508,14 @@ def run_v3(*, repeats: int = 1, live: bool = False, client=None, config: SearchC
         for repeat in range(repeat_start, repeat_start + repeats):
             trees = {}
             current_experiment = {"repeat": repeat, "s0_fingerprint": TradeWorld(scenario).s0_fingerprint,
+                                  "prompt_version": prompt_version, "reward_version": reward_version,
                                   "method_order": list(tuple(permutations(METHODS))[(repeat - 1) % 6]),
                                   "runs": {}, "methods": {}}
             output["experiments"].append(current_experiment)
             records = current_experiment["runs"]
             records["root"] = {"run_id": "root", "node_id": "n0", "parent_id": None, "depth": 0, "branch_mode": "natural", "stage": "shared_root"}
             execute_rollout(records["root"], TradeWorld(scenario), live=live, client=client,
-                            path_memories={r: [] for r in ROLES}, branch_mode="natural", checkpoint=checkpoint)
+                            path_memories={r: [] for r in ROLES}, branch_mode="natural", checkpoint=checkpoint, prompt_version=prompt_version)
             print(f"v3 repeat={repeat} root {records['root']['status']} {records['root'].get('metrics')}", flush=True)
             if fatal(records["root"]):
                 stopped = True
@@ -470,7 +523,7 @@ def run_v3(*, repeats: int = 1, live: bool = False, client=None, config: SearchC
             if records["root"]["status"] != "completed":
                 continue
             for method in current_experiment["method_order"]:
-                tree = StrategyTree(method, config, records["root"])
+                tree = StrategyTree(method, config, records["root"], reward_version=reward_version)
                 trees[method] = tree
                 current_experiment["methods"][method] = {"tree": tree.to_dict()}
                 for step in range(1, config.max_nodes):
@@ -486,7 +539,7 @@ def run_v3(*, repeats: int = 1, live: bool = False, client=None, config: SearchC
                     world = TradeWorld.replay(scenario, records[parent.run_id]["events"])
                     world.reset()
                     execute_rollout(record, world, live=live, client=client, path_memories=path,
-                                    branch_mode=node.branch_mode, checkpoint=checkpoint, fixture_index=step)
+                                    branch_mode=node.branch_mode, checkpoint=checkpoint, fixture_index=step, prompt_version=prompt_version)
                     tree.finish(node.node_id, record)
                     checkpoint()
                     print(f"v3 repeat={repeat} {method} {node.node_id} parent={node.parent_id} mode={node.branch_mode} "
@@ -519,7 +572,7 @@ def run_v3(*, repeats: int = 1, live: bool = False, client=None, config: SearchC
                     world.reset()
                 execute_rollout(record, world, live=live, client=client, path_memories=source["path_memories"],
                                 branch_mode=winner.branch_mode, checkpoint=checkpoint,
-                                validation_contexts=source["private_contexts"], make_reflection=False, fixture_index=0)
+                                validation_contexts=source["private_contexts"], make_reflection=False, fixture_index=0, prompt_version=prompt_version)
                 metadata["statistics"] = method_statistics(tree, records, record)
                 checkpoint()
                 print(f"v3 repeat={repeat} {method} validation winner={winner.node_id} {record['status']} "
@@ -555,6 +608,7 @@ def run_v3(*, repeats: int = 1, live: bool = False, client=None, config: SearchC
 
 
 def verify_v3(output: dict[str, Any]) -> None:
+    prompt_version, reward_version = experiment_versions(output)
     scenario = scenario_from_dict(output["scenario"])
     if scenario != strategy_scenario():
         raise AssertionError("v3 冻结配置被改变")
@@ -562,14 +616,16 @@ def verify_v3(output: dict[str, Any]) -> None:
     if output["counts"] != rollout_counts(output["experiments"]):
         raise AssertionError("全批次实际场次或模型调用计数不一致")
     for experiment in output["experiments"]:
+        if experiment_versions(experiment) != (prompt_version, reward_version):
+            raise AssertionError("批次内Prompt/奖励版本不一致")
         initial = TradeWorld(scenario)
         if initial.s0_fingerprint != experiment["s0_fingerprint"]:
             raise AssertionError("S0指纹不一致")
         records = experiment["runs"]
         for record in records.values():
-            _verify_rollout(record, scenario)
+            _verify_rollout(record, scenario, prompt_version=prompt_version)
         for method, metadata in experiment["methods"].items():
-            tree = StrategyTree(method, config, records["root"])
+            tree = StrategyTree(method, config, records["root"], reward_version=reward_version)
             saved = metadata["tree"]
             for saved_node in saved["nodes"][1:]:
                 selection = tree.select()
@@ -603,7 +659,7 @@ def verify_v3(output: dict[str, Any]) -> None:
         raise AssertionError("跨重复统计不一致")
 
 
-def _verify_rollout(record: dict[str, Any], scenario) -> None:
+def _verify_rollout(record: dict[str, Any], scenario, *, prompt_version: str = LEGACY_STRATEGY_PROMPT) -> None:
     initial = TradeWorld(scenario)
     if record["initial_state"] != initial.audit_state(AUDITOR):
         raise AssertionError("节点起点不是S0")
@@ -633,6 +689,7 @@ def _verify_rollout(record: dict[str, Any], scenario) -> None:
                 raise AssertionError("Reflection不是模型实际输出")
     for role in ROLES:
         context = initial.scenario_context(role)
+        context["prompt_version"] = prompt_version
         if record["private_contexts"]:
             context["strategy_reference"] = record["private_contexts"][role]
         agent = LLMNegotiationAgent(None)
@@ -645,6 +702,8 @@ def _verify_rollout(record: dict[str, Any], scenario) -> None:
                 continue
             messages = call["request"]["messages"]
             if call["purpose"] == "planning":
+                if messages[0] != {"role": "system", "content": planning_prompt(role, record["branch_mode"], prompt_version)}:
+                    raise AssertionError("规划Prompt与记录版本不一致")
                 expected = {"own_context": initial.scenario_context(role), "path_memory": record["path_memories"][role]}
                 if messages[1]["content"] != json.dumps(expected, ensure_ascii=False, sort_keys=True):
                     raise AssertionError("计划读取了非本人路径或对手参数")
@@ -666,7 +725,8 @@ def main() -> None:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(description="SocialRewind v3：完整谈判级策略树搜索")
+    parser = argparse.ArgumentParser(description="SocialRewind v3.1：假设检验与Nash策略树搜索")
+    parser.add_argument("--version", choices=(LEGACY_STRATEGY_PROMPT, STRATEGY_PROMPT), default=STRATEGY_PROMPT, help="新运行的Prompt/奖励版本；回放自动采用日志版本")
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--nodes", type=int, default=7, help="含根的搜索预算，默认7")
@@ -677,8 +737,8 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.3)
     parser.add_argument("--max-tokens", type=int, default=1200)
     parser.add_argument("--disable-thinking", action="store_true")
-    parser.add_argument("--log", type=Path, default=Path("runs/v3.json"))
-    parser.add_argument("--html", type=Path, default=Path("runs/v3.html"))
+    parser.add_argument("--log", type=Path, default=Path("runs/v31.json"))
+    parser.add_argument("--html", type=Path, default=Path("runs/v31.html"))
     parser.add_argument("--replay", type=Path)
     args = parser.parse_args()
     if args.html.resolve() in (args.log.resolve(), args.replay.resolve() if args.replay else None):
@@ -698,7 +758,8 @@ def main() -> None:
         client = OpenAICompatibleClient(OpenAICompatibleConfig(args.api_base, key, args.model,
             max_tokens=args.max_tokens, temperature=args.temperature,
             extra_body={"thinking": {"type": "disabled"}} if args.disable_thinking else {}))
-    run_v3(repeats=args.repeats, live=args.live, client=client, config=SearchConfig(max_nodes=args.nodes, seed=args.seed), log_path=args.log, html_path=args.html)
+    run_v3(repeats=args.repeats, live=args.live, client=client, config=SearchConfig(max_nodes=args.nodes, seed=args.seed), log_path=args.log, html_path=args.html,
+           prompt_version=args.version, reward_version=NASH_REWARD if args.version == STRATEGY_PROMPT else WELFARE_REWARD)
     print(f"JSON: {args.log.resolve()}\nHTML: {args.html.resolve()}")
 
 
